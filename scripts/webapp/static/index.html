@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Registry Dashboard</title>
+    <style>
+        :root {
+            --bg: #0f1115;
+            --panel: #16191f;
+            --text: #e6e6e6;
+            --muted: #9aa0a6;
+            --border: #2c313a;
+            --accent: #4f8cff;
+            --ok: #2ecc71;
+            --warn: #f1c40f;
+            --danger: #e74c3c;
+        }
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+        }
+        header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--panel);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 { margin: 0; font-size: 1.4rem; }
+        .status {
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+        .status.connected { color: var(--ok); }
+        .status.disconnected { color: var(--danger); }
+        main { padding: 2rem; }
+        .meta {
+            margin-bottom: 1rem;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+            vertical-align: top;
+        }
+        th {
+            background: #1f232c;
+            color: var(--accent);
+            font-weight: 600;
+        }
+        tr:last-child td { border-bottom: none; }
+        .empty {
+            padding: 3rem;
+            text-align: center;
+            color: var(--muted);
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge-onworking { background: rgba(79, 140, 255, 0.15); color: var(--accent); }
+        .badge-finished { background: rgba(46, 204, 113, 0.15); color: var(--ok); }
+        .badge-stop { background: rgba(241, 196, 15, 0.15); color: var(--warn); }
+        .cell-list {
+            max-width: 220px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .issues { color: var(--danger); }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🧭 Agent Registry Dashboard</h1>
+        <div id="connection-status" class="status">Connessione in corso...</div>
+    </header>
+    <main>
+        <div class="meta" id="registry-path">Registry: —</div>
+        <div id="table-container">
+            <div class="empty">Caricamento in corso...</div>
+        </div>
+    </main>
+
+    <script>
+        const statusEl = document.getElementById('connection-status');
+        const pathEl = document.getElementById('registry-path');
+        const containerEl = document.getElementById('table-container');
+
+        function renderAgent(a) {
+            const statusClass = {
+                'OnWorking': 'badge-onworking',
+                'Finished': 'badge-finished',
+                'Stop': 'badge-stop'
+            }[a.status] || 'badge-stop';
+
+            const todo = a.todo || {};
+            const fmtList = (arr) => Array.isArray(arr) && arr.length ? arr.join('\n') : '—';
+
+            return `
+                <tr>
+                    <td><strong>${escapeHtml(a.session_id)}</strong></td>
+                    <td>${escapeHtml(a.provider)}<br><span style="color:var(--muted);font-size:0.8rem">${escapeHtml(a.ai_version)}</span></td>
+                    <td>${escapeHtml(a.started_at)}</td>
+                    <td>${escapeHtml(a.working_on)}</td>
+                    <td class="cell-list">${escapeHtml(fmtList(todo.past))}</td>
+                    <td class="cell-list">${escapeHtml(fmtList(todo.present))}</td>
+                    <td class="cell-list">${escapeHtml(fmtList(todo.future))}</td>
+                    <td class="cell-list">${escapeHtml(fmtList(a.space))}</td>
+                    <td class="cell-list">${escapeHtml(fmtList(a.do_not_touch))}</td>
+                    <td><span class="badge ${statusClass}">${escapeHtml(a.status)}</span></td>
+                    <td class="issues">${escapeHtml(a.issues || '—')}</td>
+                    <td class="cell-list">${escapeHtml(a.handoff || '—')}</td>
+                </tr>
+            `;
+        }
+
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function render(data) {
+            pathEl.textContent = `Registry: ${data.registry_path}`;
+            const agents = data.agents || [];
+            const working = agents.filter(a => a.status === 'OnWorking');
+
+            if (working.length === 0) {
+                containerEl.innerHTML = '<div class="empty">Nessun agente attivo al momento.</div>';
+                return;
+            }
+
+            const rows = working.map(renderAgent).join('');
+            containerEl.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Session ID</th>
+                            <th>Provider / Version</th>
+                            <th>Started At</th>
+                            <th>Working On</th>
+                            <th>To Do Past</th>
+                            <th>To Do Present</th>
+                            <th>To Do Future</th>
+                            <th>Space</th>
+                            <th>Do Not Touch</th>
+                            <th>Status</th>
+                            <th>Issues</th>
+                            <th>Handoff</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        function connect() {
+            const es = new EventSource('/api/registry/stream');
+
+            es.onopen = () => {
+                statusEl.textContent = 'Connesso • aggiornamento live';
+                statusEl.className = 'status connected';
+            };
+
+            es.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.error) {
+                        console.error('Registry error:', data.error);
+                        return;
+                    }
+                    render(data);
+                } catch (err) {
+                    console.error('Parse error:', err);
+                }
+            };
+
+            es.onerror = () => {
+                statusEl.textContent = 'Disconnesso • riconnessione...';
+                statusEl.className = 'status disconnected';
+                es.close();
+                setTimeout(connect, 3000);
+            };
+        }
+
+        connect();
+    </script>
+</body>
+</html>
