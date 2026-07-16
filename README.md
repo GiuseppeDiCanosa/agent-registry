@@ -89,9 +89,14 @@ escaping corretto nella tabella, path della doc risolti a runtime.
 
 ## Sviluppo
 
-Il progetto segue [spec-as-source](https://github.com/GiuseppeDiCanosa): la spec
-è la sorgente, il codice il derivato. Le capability sono in `openspec/specs/`, e
-ogni requisito dichiara il test che lo verifica.
+Il progetto segue **spec-as-source**: la spec è la sorgente, il codice il derivato.
+Ogni requisito dichiara il test che lo verifica, e ogni file generato dichiara la
+spec che lo governa nel proprio header.
+
+Le spec **non viaggiano nel pacchetto pubblicato** — chi installa la skill vuole
+il codice. Vivono nel repo, dove CI ed enforcement le usano davvero:
+[`openspec/specs/`](https://github.com/GiuseppeDiCanosa/agent-registry/tree/main/openspec/specs).
+È lì che punta il `Source:` negli header dei sorgenti.
 
 ```bash
 pip install -r scripts/requirements.txt -r requirements-dev.txt
