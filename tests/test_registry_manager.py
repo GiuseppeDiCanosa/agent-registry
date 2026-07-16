@@ -189,12 +189,18 @@ def test_pipe_is_escaped_inside_lists(runner, isolated_env):
     rows = [l for l in body.splitlines() if l.strip().startswith("|")]
 
     assert len(rows) == 3, f"La tabella si e' rotta su una lista con '|': {rows}"
-    header_cols = rows[0].count("|")
-    agent_cols = rows[2].count("|")
-    assert agent_cols == header_cols, (
-        f"Colonne disallineate: header {header_cols}, riga agente {agent_cols}. "
+
+    # Solo le pipe non neutralizzate delimitano colonne: `\|` è un carattere
+    # dentro una cella, quindi va tolto prima di contare.
+    def _columns(row: str) -> int:
+        return row.replace("\\|", "").count("|")
+
+    assert _columns(rows[2]) == _columns(rows[0]), (
+        f"Colonne disallineate: header {_columns(rows[0])}, "
+        f"riga agente {_columns(rows[2])}. "
         "Un '|' dentro una lista ha creato una colonna fantasma."
     )
+    assert "\\|" in rows[2], "Il '|' dentro la lista non e' stato neutralizzato"
 
     agent = runner.call(RM, "find_agent", "claude-1")
     assert agent["space"] == ["src/a|b.py", "src/normale.py"]

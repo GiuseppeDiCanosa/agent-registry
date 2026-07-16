@@ -5,205 +5,227 @@ description: >
   contemporaneamente sullo stesso progetto. Usa questa skill SEMPRE quando lavori in
   parallelo con altre AI CLI, quando devi salvare lo stato di una sessione condivisa,
   quando vuoi evitare sovrascritture su file toccati da altri agenti, o quando l'utente
-  parla di "multi-tap", "registry agenti", "coordination", "lock file", "handoff condiviso",
+  parla di "multi-agente", "registry agenti", "coordination", "lock file", "handoff condiviso",
   "chi sta lavorando su cosa" o "evitare che le AI si pestino i piedi".
 ---
 
 # Agent Registry — Coordination Multi-Agent
 
-Questa skill permette a più agenti AI CLI di lavorare sullo stesso progetto senza
-sovrascriversi a vicenda. Mantiene un **registry condiviso** sul Desktop che dice:
+Permette a più agenti AI CLI di lavorare sullo stesso progetto senza sovrascriversi.
+Mantiene un **registry condiviso** che dice chi sta lavorando, su cosa, quali file
+sono bloccati e quali handoff esistono.
 
-- chi sta lavorando (provider, versione, sessione)
-- su cosa sta lavorando (`working on`, todo passato/presente/futuro)
-- quali file sta toccando (`space`)
-- quali file sono bloccati (`do-not-touch` locks)
-- quali problemi ha riscontrato (`issues`)
-- quali handoff ha salvato (`handoff`)
-
-Il registry è un file markdown leggibile sia da umani che da macchine:
-
-```
-~/Desktop/agent-registry/registry.md
-```
-
-C'è anche una **web-app locale** in Python + FastAPI per monitorare lo stato in tempo reale.
+Il registry è un markdown leggibile da umani e da macchine, in
+`~/Desktop/agent-registry/registry.md` (sovrascrivibile, vedi *Configurazione*).
+Contiene in testa un **blocco di protocollo** che istruisce qualunque agente lo apra:
+le regole viaggiano col file, così valgono anche per gli agenti che questa skill
+non la caricano affatto.
 
 ---
 
 ## Regola d'oro
 
-> **Leggi il registry prima di toccare qualsiasi file. Non modificare mai un file che è nel campo `do_not_touch` di un altro agente.**
+> **Leggi il registry prima di toccare qualsiasi file. Non modificare mai un file che è
+> nel campo `do_not_touch` di un altro agente con status `OnWorking`.**
+
+## I lock sono advisory — leggi qui prima di fidarti
+
+Il lock **non impedisce fisicamente** la scrittura: non esiste alcun meccanismo che
+blocchi un `write()`. Protegge solo gli agenti che lo consultano. Se un agente ignora
+il protocollo, sovrascriverà comunque il lavoro altrui e nessuno lo fermerà.
+
+Il valore della skill sta interamente nel fatto che **ogni** agente rispetti il
+protocollo. Un agente che crede di essere protetto quando non lo è sta peggio di uno
+che sa di non esserlo.
+
+---
+
+## Come invocare gli script
+
+Gli script stanno in `scripts/` **dentro la directory di questa skill**, che cambia a
+seconda di come è installata:
+
+| Installazione | Percorso |
+|---|---|
+| `npx tessl i spec-driven-devlopment/agent-registry` | `.tessl/plugins/spec-driven-devlopment/agent-registry/scripts/` |
+| Skill Claude Code locale | `.claude/skills/agent-registry/scripts/` |
+| Copia manuale | dove l'hai messa |
+
+**Non assumere il percorso: risolvilo una volta a inizio sessione** e riusalo.
+
+```bash
+SKILL_DIR=$(dirname $(find . ~/.claude/skills -name "lock_manager.py" -path "*agent-registry*" 2>/dev/null | head -1))
+echo "$SKILL_DIR"   # es. ./.tessl/plugins/spec-driven-devlopment/agent-registry/scripts
+```
+
+Negli esempi che seguono `$SKILL_DIR` è quella directory.
+
+**Dipendenze**: `pip install -r $SKILL_DIR/requirements.txt` (solo PyYAML).
 
 ---
 
 ## Primo passo all'avvio (obbligatorio)
 
-Non appena viene caricata questa skill, l'agente DEVE:
-
-1. Leggere `~/Desktop/agent-registry/registry.md`.
-2. Identificare quali file/aree sono `do_not_touch` per altri agenti con status `OnWorking`.
-3. Registrare la propria sessione con `scripts/registry_manager.py`.
-
-Esempio:
+1. Leggi `~/Desktop/agent-registry/registry.md` (o `$AGENT_REGISTRY_PATH`) e il suo
+   blocco di protocollo.
+2. Identifica i file `do_not_touch` degli agenti con status `OnWorking`.
+3. Registra la tua sessione:
 
 ```bash
-python .agents/skills/agent-registry/scripts/registry_manager.py register \
+python "$SKILL_DIR/registry_manager.py" register \
   "kimi-$(date +%s)" "Kimi" "2.7" "Refactoring modulo auth" \
   "src/auth.py,src/oauth.py" "analisi codice,scrittura test"
 ```
 
-Argomenti:
-
-1. `session_id` — identificativo univoco (es. `kimi-1626451200`)
-2. `provider` — nome del provider CLI (Kimi, Claude, Gemini, OpenAI, ...)
-3. `ai_version` — versione/modello (es. `Kimi 2.7`, `Claude Opus 4.8`)
-4. `working_on` — descrizione sintetica del lavoro
-5. `space` — file/aree toccate, separati da virgola
-6. `todo_present` — task in corso, separati da virgola
-
----
-
-## Aggiornare lo stato durante la sessione
-
-Mentre lavori, aggiorna periodicamente `working_on`, `todo`, `space`, `issues`:
-
-```bash
-python .agents/skills/agent-registry/scripts/registry_manager.py update \
-  "kimi-1626451200" "Implementazione lock filesystem"
-```
-
-Per aggiornamenti più granulari usa Python importando `registry_manager`:
-
-```python
-from scripts.registry_manager import update_session
-update_session(
-    "kimi-1626451200",
-    working_on="Implementazione lock filesystem",
-    todo={"past": ["setup"], "present": ["lock manager"], "future": ["webapp"]},
-    space=["scripts/lock_manager.py"],
-    issues="",
-)
-```
+Argomenti: `session_id`, `provider`, `ai_version`, `working_on`, `space` (file separati
+da virgola), `todo_present`.
 
 ---
 
 ## Lock su file/aree
 
-Prima di modificare un file, acquisisci il lock con `lock_manager.py`:
+**Acquisisci il lock prima di ogni modifica.** L'esito sta nell'**exit code**: `0` = il
+lock è tuo, diverso da `0` = è di un altro, fermati.
 
 ```bash
-python .agents/skills/agent-registry/scripts/lock_manager.py acquire \
-  "src/auth.py" "kimi-1626451200"
+if python "$SKILL_DIR/lock_manager.py" acquire "src/auth.py" "kimi-1626451200"; then
+    echo "lock ottenuto, procedo"
+else
+    echo "occupato da un altro agente, non tocco il file"
+fi
 ```
 
-Se il file è libero, il lock viene acquisito. Se è occupato, ricevi un messaggio di blocco.
+Non fare parsing del testo stampato: l'exit code è il contratto.
 
-Per aggiornare il registry con i file bloccati:
+### Heartbeat
+
+I lock scadono dopo 120 secondi. Se il lavoro dura di più, rinnovali:
+
+```bash
+python "$SKILL_DIR/lock_manager.py" heartbeat "src/auth.py" "kimi-1626451200"
+```
+
+Oppure un loop in background (muore con la shell che lo ha lanciato):
+
+```bash
+python "$SKILL_DIR/lock_manager.py" heartbeat-loop "src/auth.py" "kimi-1626451200" 30 &
+```
+
+Solo l'owner può rinnovare o rilasciare un lock.
+
+### Rilascio
+
+```bash
+python "$SKILL_DIR/lock_manager.py" release "src/auth.py" "kimi-1626451200"
+```
+
+---
+
+## Aggiornare lo stato
+
+```bash
+python "$SKILL_DIR/registry_manager.py" update "kimi-1626451200" "Implementazione lock filesystem"
+```
+
+Per aggiornamenti granulari, da Python (con `scripts/` sul path):
 
 ```python
-from scripts.registry_manager import update_session
+from registry_manager import update_session
 update_session(
     "kimi-1626451200",
+    working_on="Implementazione lock filesystem",
+    todo={"past": ["setup"], "present": ["lock manager"], "future": ["webapp"]},
+    space=["scripts/lock_manager.py"],
     do_not_touch=["src/auth.py"],
 )
 ```
 
-### Heartbeat
-
-I lock hanno un timeout (default 120 secondi). Per tenerli vivi, lancia un heartbeat in background:
-
-```bash
-python .agents/skills/agent-registry/scripts/lock_manager.py heartbeat-loop \
-  "src/auth.py" "kimi-1626451200" 30 &
-```
-
-Il numero finale è l'intervallo in secondi (opzionale, default 30).
-
-### Rilasciare un lock
-
-```bash
-python .agents/skills/agent-registry/scripts/lock_manager.py release \
-  "src/auth.py" "kimi-1626451200"
-```
+Dichiara in `do_not_touch` i file su cui hai preso il lock: è ciò che gli altri agenti
+leggono, e ciò che `finish` userà per rilasciarli.
 
 ---
 
 ## Integrazione con handoff
 
-Quando salvi un handoff con la skill `handoff`, registra il path nel registry:
-
 ```bash
-python .agents/skills/agent-registry/scripts/registry_manager.py handoff \
-  "kimi-1626451200" ".handoff-kimi/HANDOFF-007.md"
+python "$SKILL_DIR/registry_manager.py" handoff "kimi-1626451200" ".handoff-kimi/HANDOFF-007.md"
 ```
 
-Oppure, da Python:
-
-```python
-from scripts.registry_manager import add_handoff_ref
-add_handoff_ref("kimi-1626452000", ".handoff-kimi/HANDOFF-007.md")
-```
-
-La convenzione è 1:1 — ogni sessione agente salva un handoff e ne registra il path.
+La convenzione è 1:1 — ogni sessione salva un handoff e ne registra il path.
 
 ---
 
 ## Fine sessione
 
-Quando hai finito, marca la sessione come `Finished` e rilascia tutti i lock:
-
 ```bash
-python .agents/skills/agent-registry/scripts/registry_manager.py finish \
-  "kimi-1626451200"
+python "$SKILL_DIR/registry_manager.py" finish "kimi-1626451200"
 ```
 
-Poi rilascia esplicitamente ogni lock che hai acquisito:
+Marca la sessione `Finished`, svuota `do_not_touch` e **rilascia i lock della sessione**.
+I lock di altri agenti non vengono toccati.
+
+---
+
+## Configurazione
+
+| Variabile | Default | Uso |
+|---|---|---|
+| `AGENT_REGISTRY_PATH` | `~/Desktop/agent-registry/registry.md` | percorso del registry |
+| `AGENT_REGISTRY_LOCK_DIR` | `~/Desktop/agent-registry/locks/` | directory dei lock |
+
+**Metti registry e lock su un filesystem locale, fuori dalle cartelle sincronizzate.**
+Il default sta su `~/Desktop`, che su molti Mac è sincronizzato da iCloud Drive: la
+sincronizzazione può creare copie in conflitto proprio del file che deve essere la
+fonte di verità. Anche i filesystem di rete (NFS) sono da evitare: le garanzie di
+`flock` lì sono deboli o assenti, e il coordinamento salta in silenzio.
 
 ```bash
-python .agents/skills/agent-registry/scripts/lock_manager.py release \
-  "src/auth.py" "kimi-1626451200"
+export AGENT_REGISTRY_PATH="$PWD/.agent-registry/registry.md"
+export AGENT_REGISTRY_LOCK_DIR="$PWD/.agent-registry/locks"
 ```
 
 ---
 
 ## Web-app di monitoraggio
 
-Avvia la web-app per vedere lo stato degli agenti in tempo reale:
-
 ```bash
-cd .agents/skills/agent-registry/scripts/webapp
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8765
+pip install -r "$SKILL_DIR/webapp/requirements.txt"
+cd "$SKILL_DIR/webapp" && uvicorn main:app --port 8765
 ```
 
-Poi apri nel browser: http://localhost:8765
-
-La tabella si aggiorna automaticamente ogni 5 secondi.
+Poi apri http://localhost:8765 — la tabella si aggiorna ogni 5 secondi.
 
 ---
 
 ## Struttura della skill
 
 ```
-.agents/skills/agent-registry/
-├── SKILL.md                          # questo file
-├── references/
-│   └── registry-schema.yaml          # schema del registry
+agent-registry/
+├── SKILL.md                     # questo file
 ├── templates/
-│   └── registry-template.md          # template vuoto del registry
+│   └── registry-template.md     # registry vuoto + blocco di protocollo
 └── scripts/
-    ├── registry_manager.py           # lettura/scrittura registry
-    ├── lock_manager.py               # lock filesystem + heartbeat
-    └── webapp/                       # web-app FastAPI
+    ├── registry_manager.py      # lettura/scrittura registry
+    ├── lock_manager.py          # lock filesystem + heartbeat
+    ├── requirements.txt
+    └── webapp/                  # dashboard FastAPI
 ```
 
 ---
 
 ## Note tecniche
 
-- Il registry usa YAML frontmatter per i dati e una tabella markdown come vista leggibile.
-- La scrittura nel registry è atomica e protetta da lock globale sul file.
-- I lock sui file usano `fcntl` (Unix) e sono rilasciati automaticamente dal kernel se il processo muore.
-- Il timeout/heartbeat gestisce il caso in cui un agente crasha senza rilasciare il lock.
+- Il frontmatter YAML è l'unico dato autorevole; la tabella markdown è una vista
+  rigenerata a ogni scrittura, come il blocco di protocollo.
+- **Lo stato di un lock è il contenuto del suo file**, che sopravvive alla morte del
+  processo: è ciò che rende il lock valido fra comandi CLI one-shot. `flock` serve solo
+  a serializzare gli aggiornamenti, mai a rappresentare la proprietà.
+- I lock file non vengono mai cancellati: il rilascio ne azzera il contenuto. Cancellarli
+  sostituirebbe l'inode e renderebbe inefficace il lock di chi li tiene aperti.
+- Il registry è protetto da un lock su `registry.md.lock`, file dedicato e mai rinominato,
+  distinto dal file che viene scritto.
+- L'identità di un lock è il path **reale** risolto: path relativi, assoluti e symlink
+  allo stesso file contendono lo stesso lock; file omonimi in progetti diversi no.
+- Un lock non rinnovato per oltre 120s è stale e può essere acquisito da un altro agente:
+  è ciò che impedisce a un agente crashato di bloccare un file per sempre.
 - Timestamp in timezone Roma (`Europe/Rome`).
