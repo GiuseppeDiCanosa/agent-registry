@@ -1,0 +1,14 @@
+repos:
+  - repo: local
+    hooks:
+      - id: check-spec-links
+        name: Check spec test links
+        entry: bash scripts/check-spec-links.sh
+        language: system
+        pass_filenames: false
+
+      - id: check-target-ownership
+        name: Check target ownership
+        entry: bash scripts/check-target-ownership.sh
+        language: system
+        pass_filenames: false

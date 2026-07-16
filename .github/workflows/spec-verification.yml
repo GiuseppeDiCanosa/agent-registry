@@ -1,0 +1,35 @@
+name: Spec Verification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify-specs:
+    name: Run spec verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check all [@test] links resolve to existing files
+        run: bash scripts/check-spec-links.sh
+
+      - name: Check target ownership (no target changes without spec update)
+        run: bash scripts/check-target-ownership.sh
+
+      - name: Build spec manifest
+        run: python3 scripts/build-spec-manifest.py
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest -v
