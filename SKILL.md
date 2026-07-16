@@ -47,7 +47,7 @@ seconda di come è installata:
 
 | Installazione | Percorso |
 |---|---|
-| `npx tessl i spec-driven-devlopment/agent-registry` | `.tessl/plugins/spec-driven-devlopment/agent-registry/scripts/` |
+| `npx tessl i spec-driven-development/agent-registry` | `.tessl/plugins/spec-driven-development/agent-registry/scripts/` |
 | Skill Claude Code locale | `.claude/skills/agent-registry/scripts/` |
 | Copia manuale | dove l'hai messa |
 
@@ -55,7 +55,7 @@ seconda di come è installata:
 
 ```bash
 SKILL_DIR=$(dirname $(find . ~/.claude/skills -name "lock_manager.py" -path "*agent-registry*" 2>/dev/null | head -1))
-echo "$SKILL_DIR"   # es. ./.tessl/plugins/spec-driven-devlopment/agent-registry/scripts
+echo "$SKILL_DIR"   # es. ./.tessl/plugins/spec-driven-development/agent-registry/scripts
 ```
 
 Negli esempi che seguono `$SKILL_DIR` è quella directory.
