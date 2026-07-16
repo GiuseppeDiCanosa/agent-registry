@@ -22,25 +22,33 @@ Il secondo difetto è indipendente dal primo: `save_agents` prende il flock sull
 
 ## Decisions
 
-### Lock via `os.open(O_CREAT|O_EXCL)` invece di `fcntl.flock`
+### Separare il *meccanismo di esclusione* dallo *stato che sopravvive*
 
-`O_CREAT|O_EXCL` fallisce con `EEXIST` se il file esiste già, e la verifica-e-creazione è atomica a livello di syscall — nessuna finestra tra il test e la creazione. Soprattutto: **l'esito è un file su disco, che sopravvive alla morte del processo**. È l'unica primitiva POSIX che dà mutua esclusione con la vita utile richiesta dal nostro modello (il lock deve durare *più* del processo che lo prende).
+L'errore concettuale della 0.1.0 non è "ha usato flock": è aver chiesto a flock di essere **lo stato**. flock vive quanto il processo; la proprietà di un lock deve vivere quanto il lavoro. Da qui la separazione che regge tutto il design:
+
+- **Lo stato** — chi possiede il path e da quando — sta nel **contenuto di un file**, che sopravvive alla morte del processo. È l'unica cosa che decide se un path è occupato.
+- **La mutua esclusione durante l'aggiornamento** di quello stato è garantita da `flock`, tenuto per la sola durata della sezione critica read-modify-write, interamente dentro un processo vivo.
+
+Con questa separazione flock è la primitiva giusta e il suo rilascio automatico alla morte del processo diventa una proprietà desiderabile: un agente che crasha a metà aggiornamento non lascia il lock file bloccato per sempre. Lo stesso ragionamento vale identico nel registry — stessa syscall, stesso verdetto, perché in entrambi i casi la durata richiesta è "un istante dentro un processo vivo".
+
+**Vincolo che rende il tutto corretto: il file di lock non viene mai cancellato né sostituito.** Un rilascio azzera il contenuto, non rimuove il file. Se il file venisse unlinkato, due processi potrebbero tenere fd su inode diversi e flock non escluderebbe più nulla — è esattamente il modo in cui `shutil.move` aveva neutralizzato il lock del registry nella 0.1.0. Per la stessa ragione l'aggiornamento avviene in-place (`ftruncate` + `write`) e mai con `os.replace`. I lettori prendono un flock condiviso, quindi non osservano mai una scrittura a metà.
 
 Alternative considerate:
-- *Mantenere flock con un processo daemon long-lived*: costringerebbe ogni agente a gestire il ciclo di vita di un demone, e la morte del demone rilascerebbe tutto in blocco. Complessità sproporzionata.
-- *`fcntl.lockf`*: stesso identico problema di vita legata al processo.
-- *Directory come lock (`mkdir`)*: anch'essa atomica, ma non permette di scrivere owner e timestamp nello stesso oggetto; servirebbe un file dentro la directory, con una seconda finestra di race.
-- *SQLite*: darebbe transazionalità vera, ma introduce una dipendenza concettuale pesante e rende il lock non ispezionabile con `cat`, perdendo il valore diagnostico del formato attuale.
+- *`os.open(O_CREAT|O_EXCL)` + `os.link()`*: era l'approccio previsto in prima stesura. Dà un vincitore unico sull'acquisizione, ma **non risolve il takeover di un lock stale**: rimuovere lo stale richiede `unlink()`, che agisce sul *nome* e non sull'inode, quindi non esiste modo di dire "cancella solo se è ancora quello che ho letto". Due agenti che osservano lo stesso stale possono unlinkare l'uno il lock appena creato dall'altro e credersi entrambi owner. Verificare `st_ino`/`st_mtime_ns` prima e dopo non chiude la finestra, perché fra il controllo e l'unlink non c'è atomicità. Scartato per questo.
+- *Daemon long-lived che tiene i flock*: costringerebbe ogni agente a gestire il ciclo di vita di un demone, e la sua morte rilascerebbe tutto in blocco.
+- *SQLite*: transazionalità vera, ma dipendenza pesante e lock non più ispezionabile con `cat`, perdendo il valore diagnostico del formato attuale.
 
-Il rovescio di O_EXCL: siccome nessuno rilascia il lock quando il processo muore, un agente che crasha lascia il lock appeso. È esattamente ciò che il meccanismo di staleness già previsto (timestamp + timeout) deve coprire — quindi lo scambio è: perdiamo il rilascio automatico del kernel (che comunque non ci serviva, era il bug) e ci teniamo la scadenza esplicita.
+Il rovescio: siccome il kernel non rilascia più nulla alla morte del processo, un agente che crasha lascia il lock appeso fino alla scadenza. È precisamente ciò che il meccanismo di staleness (timestamp + timeout) copre — lo scambio è consapevole: perdiamo un rilascio automatico che comunque non volevamo (era il bug) e ci teniamo una scadenza esplicita e osservabile.
 
-### La staleness si risolve con takeover atomico, non con "unlink e riprova"
+### La staleness si risolve dentro la sezione critica, non con "unlink e riprova"
 
-La 0.1.0 in `is_locked` faceva `unlink()` del lock stale e tornava "libero": due agenti che osservano lo stesso lock stale nello stesso istante lo cancellano entrambi e lo acquisiscono entrambi. Il takeover deve essere atomico.
+La 0.1.0 in `is_locked` faceva `unlink()` del lock stale e restituiva "libero": due agenti che osservano lo stesso stale nello stesso istante lo cancellano entrambi e lo acquisiscono entrambi.
 
-Approccio: scrivere il lock candidato in un file temporaneo nella stessa directory e tentare `os.link(tmp, lock_file)` — `link()` è atomica e fallisce con `EEXIST` se la destinazione esiste. Per il takeover di uno stale: rimuovere il vecchio lock **solo se non è cambiato nel frattempo**, confrontando l'identità del file (`st_ino`, `st_mtime_ns`) letta prima e dopo. Chi arriva secondo trova un inode diverso e rinuncia. Nessuna finestra in cui due agenti si credono entrambi owner.
+Con lo stato nel contenuto e flock a proteggere l'aggiornamento, il takeover non richiede alcuna primitiva speciale: dentro la sezione critica si rilegge il contenuto, si valuta la scadenza e si scrive il nuovo owner. Due taker sono serializzati dal flock, il secondo rilegge e vede il primo come owner fresco. `is_locked` diventa un lettore puro e non cancella più nulla: osservare non modifica.
 
-Alternativa considerata: `os.rename(tmp, lock_file)` è atomica ma **sovrascrive silenziosamente** la destinazione — è precisamente la primitiva sbagliata qui, ed è moralmente lo stesso errore della 0.1.0 (`_write_info` sovrascriveva l'owner senza guardare).
+### Costo accettato: i file di lock non spariscono
+
+Non cancellare mai i lock file significa che ogni path mai lockato lascia un file (vuoto quando rilasciato) in `locks/`. Sono pochi byte per path e restano ispezionabili con `cat`. È il prezzo diretto della correttezza — ed è preferibile all'alternativa, dove la pulizia introduce di nuovo la sostituzione di inode che ha rotto la 0.1.0.
 
 ### Il registry si serializza con un lock file dedicato e mai rinominato
 
@@ -53,6 +61,16 @@ Il ciclo diventa: prendi `flock(registry.lock)` → leggi `registry.md` → modi
 ### `finish` rilascia i lock, eliminando la seconda fonte di verità
 
 Il registry (`do_not_touch`) e la directory `locks/` sono due rappresentazioni dello stesso fatto, e la 0.1.0 le lasciava divergere chiedendo all'agente di allinearle a mano. `unregister_session` ora rilascia i lock della sessione, saltando quelli di cui non è owner. Il registry resta la vista leggibile; i file di lock restano il meccanismo autorevole.
+
+### Il protocollo viaggia col registry, non con la skill
+
+Gli agenti che questa skill deve coordinare appartengono a provider diversi — Claude, Kimi, Gemini, Codex — che **non condividono alcun sistema di skill**: `SKILL.md` istruisce solo chi la carica, cioè in pratica solo Claude. Un agente che non l'ha caricata non sa che il registry esiste, né che deve rispettarlo.
+
+L'unico artefatto che tutti toccano è il registry stesso. Mettere le regole di coordinamento nel file significa che chiunque lo apra — qualsiasi CLI, o un umano — le legge nel momento esatto in cui gli servono. Le istruzioni viaggiano con lo stato che descrivono.
+
+Il blocco è **rigenerato a ogni scrittura** e non semplicemente scritto alla creazione: un blocco che si può perdere con un update è un blocco su cui non si può contare, e il caso peggiore (un agente che legge un registry senza regole e conclude che non ce ne sono) è proprio quello da escludere. La rigenerazione lo rende anche auto-riparante rispetto alle manomissioni.
+
+Il blocco vive fra frontmatter e tabella e non è mai una fonte di dati: il frontmatter resta l'unico dato autorevole, il blocco è testo per il lettore. Deve inoltre dichiarare esplicitamente che i lock sono **advisory** — un agente che crede in una garanzia che non esiste è il problema da cui è nato questo change, e ripeterlo a livello di documentazione sarebbe la stessa classe di errore.
 
 ### `os.path.realpath` per l'identità del lock
 

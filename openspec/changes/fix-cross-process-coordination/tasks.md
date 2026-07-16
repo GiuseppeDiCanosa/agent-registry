@@ -47,6 +47,9 @@
 - [ ] 5.6 `unregister_session` rilascia i lock della sessione, saltando quelli di cui non è owner
 - [ ] 5.7 Escaping di `|` e a capo in ogni cella, incluse quelle derivate da liste
 - [ ] 5.8 CLI con exit code significativi
+- [ ] 5.9 Blocco di protocollo rigenerato a ogni scrittura fra frontmatter e tabella, con l'avvertenza sui lock advisory
+- [ ] 5.10 `tests/test_registry_protocol.py`: presenza nel registry nuovo, sopravvivenza agli aggiornamenti, parse non alterato, ripristino dopo manomissione
+- [ ] 5.11 Allineare `templates/registry-template.md` al blocco canonico, con un test che impedisca la divergenza fra template e codice
 
 ## 6. Verde e allineamento
 

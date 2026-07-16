@@ -83,6 +83,29 @@ Il registry manager SHALL mantenere il registry come documento markdown con fron
 - **WHEN** un campo di sessione, scalare o dentro una lista, contiene il carattere `|` o un a capo
 - **THEN** la tabella resta strutturalmente valida e il registry riletto restituisce il valore originale
 
+### Requirement: Protocollo di coordinamento auto-descrittivo
+Il registry manager SHALL scrivere in testa al registry, fra il frontmatter e la tabella, un blocco di protocollo in linguaggio naturale che istruisce qualunque agente AI apra il file: leggere prima di modificare, non toccare i path in `do_not_touch` delle sessioni `OnWorking`, registrarsi prima di lavorare, acquisire il lock prima di ogni modifica, chiudere la sessione a fine lavoro. Il blocco MUST essere rigenerato a ogni scrittura, così che nessun aggiornamento possa farlo sparire, e MUST dichiarare la natura advisory dei lock. La presenza del blocco MUST NOT alterare i dati: il frontmatter resta l'unica fonte autorevole e il registry deve restare parsabile.
+
+Il registry è l'unico punto di contatto comune fra agenti di provider diversi, che non condividono alcun sistema di skill: le istruzioni devono viaggiare con lo stato che descrivono, non con la skill di un singolo CLI.
+
+**Verified by**: [@test] tests/test_registry_protocol.py
+
+#### Scenario: Il protocollo è presente in un registry nuovo
+- **WHEN** il registry viene creato per la prima volta
+- **THEN** contiene il blocco di protocollo con le regole di coordinamento e l'avvertenza che i lock sono advisory
+
+#### Scenario: Il protocollo sopravvive agli aggiornamenti
+- **WHEN** una sessione viene registrata, aggiornata e chiusa
+- **THEN** il blocco di protocollo è ancora presente e integro dopo ogni scrittura
+
+#### Scenario: Il protocollo non interferisce col parse
+- **WHEN** un registry contenente il blocco di protocollo viene riletto
+- **THEN** il frontmatter e la lista degli agenti sono restituiti correttamente
+
+#### Scenario: Un blocco manomesso viene ripristinato
+- **WHEN** un umano o un agente altera o cancella il blocco di protocollo e avviene una scrittura successiva
+- **THEN** il blocco torna al contenuto canonico
+
 ### Requirement: Riferimento all'handoff di sessione
 Il registry manager SHALL permettere di associare a una sessione il percorso dell'handoff salvato, rendendolo leggibile a chiunque consulti il registry.
 
