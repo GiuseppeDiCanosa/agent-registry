@@ -1,1 +1,118 @@
-{}
+{
+  "openspec/specs/agent-registry/spec.md": {
+    "targets": [
+      "scripts/registry_manager.py"
+    ],
+    "requirements": {
+      "aggiornamenti-concorrenti-che-non-si-perdono": {
+        "name": "Aggiornamenti concorrenti che non si perdono",
+        "tests": [
+          "tests/test_registry_concurrency.py"
+        ]
+      },
+      "registrazione-di-una-sessione-agente": {
+        "name": "Registrazione di una sessione agente",
+        "tests": [
+          "tests/test_registry_manager.py"
+        ]
+      },
+      "aggiornamento-dei-campi-di-sessione": {
+        "name": "Aggiornamento dei campi di sessione",
+        "tests": [
+          "tests/test_registry_manager.py"
+        ]
+      },
+      "chiusura-di-sessione-con-rilascio-dei-lock": {
+        "name": "Chiusura di sessione con rilascio dei lock",
+        "tests": [
+          "tests/test_registry_concurrency.py"
+        ]
+      },
+      "percorso-del-registry-configurabile": {
+        "name": "Percorso del registry configurabile",
+        "tests": [
+          "tests/test_registry_manager.py"
+        ]
+      },
+      "registry-leggibile-da-umani-e-da-macchine": {
+        "name": "Registry leggibile da umani e da macchine",
+        "tests": [
+          "tests/test_registry_manager.py"
+        ]
+      },
+      "protocollo-di-coordinamento-auto-descrittivo": {
+        "name": "Protocollo di coordinamento auto-descrittivo",
+        "tests": [
+          "tests/test_registry_protocol.py"
+        ]
+      },
+      "riferimento-all-handoff-di-sessione": {
+        "name": "Riferimento all'handoff di sessione",
+        "tests": [
+          "tests/test_registry_manager.py"
+        ]
+      },
+      "interfaccia-a-riga-di-comando-con-exit-code-significativi": {
+        "name": "Interfaccia a riga di comando con exit code significativi",
+        "tests": [
+          "tests/test_registry_cli.py"
+        ]
+      }
+    }
+  },
+  "openspec/specs/file-locking/spec.md": {
+    "targets": [
+      "scripts/lock_manager.py"
+    ],
+    "requirements": {
+      "mutua-esclusione-fra-processi-one-shot": {
+        "name": "Mutua esclusione fra processi one-shot",
+        "tests": [
+          "tests/test_lock_cross_process.py"
+        ]
+      },
+      "riacquisizione-idempotente-da-parte-dell-owner": {
+        "name": "Riacquisizione idempotente da parte dell'owner",
+        "tests": [
+          "tests/test_lock_cross_process.py"
+        ]
+      },
+      "scadenza-dei-lock-abbandonati": {
+        "name": "Scadenza dei lock abbandonati",
+        "tests": [
+          "tests/test_lock_cross_process.py"
+        ]
+      },
+      "rinnovo-riservato-all-owner": {
+        "name": "Rinnovo riservato all'owner",
+        "tests": [
+          "tests/test_lock_cross_process.py"
+        ]
+      },
+      "rilascio-riservato-all-owner": {
+        "name": "Rilascio riservato all'owner",
+        "tests": [
+          "tests/test_lock_cross_process.py"
+        ]
+      },
+      "identit-del-lock-indipendente-dalla-directory-di-lavoro": {
+        "name": "Identità del lock indipendente dalla directory di lavoro",
+        "tests": [
+          "tests/test_lock_cross_process.py"
+        ]
+      },
+      "directory-dei-lock-configurabile": {
+        "name": "Directory dei lock configurabile",
+        "tests": [
+          "tests/test_lock_cross_process.py"
+        ]
+      },
+      "interfaccia-a-riga-di-comando-con-exit-code-significativi": {
+        "name": "Interfaccia a riga di comando con exit code significativi",
+        "tests": [
+          "tests/test_lock_cli.py"
+        ]
+      }
+    }
+  }
+}
