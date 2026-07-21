@@ -1,6 +1,7 @@
 """Test per sync_manager.py (git-sync multi-macchina)."""
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -68,10 +69,10 @@ def _join_pending(timeout: float = 60.0) -> None:
 
 
 def test_init_creates_repo_commit_and_remote(tmp_home, bare_remote):
-    home = sm.init_git_sync(str(bare_remote), tmp_home)
+    home = sm.init_git_sync(f"file://{bare_remote}", tmp_home)
 
     assert (home / ".git").is_dir()
-    assert _git(home, "remote", "get-url", "origin").stdout.strip() == str(bare_remote)
+    assert _git(home, "remote", "get-url", "origin").stdout.strip() == f"file://{bare_remote}"
     # primo commit presente
     assert _git(home, "rev-parse", "--verify", "HEAD").returncode == 0
     # registry.md tracciato nel primo commit
@@ -81,7 +82,7 @@ def test_init_creates_repo_commit_and_remote(tmp_home, bare_remote):
 
 
 def test_init_writes_gitignore(tmp_home, bare_remote):
-    home = sm.init_git_sync(str(bare_remote), tmp_home)
+    home = sm.init_git_sync(f"file://{bare_remote}", tmp_home)
     content = (home / ".gitignore").read_text(encoding="utf-8")
     for entry in ("locks/", "wiki.db", "*.tmp", "__pycache__/", "sync-status.json"):
         assert entry in content
@@ -91,8 +92,8 @@ def test_init_existing_repo_configures_only_remote(tmp_home, bare_remote):
     # Repo già esistente senza remote: init configura solo il remote.
     tmp_home.mkdir(parents=True)
     _git(tmp_home, "init")
-    home = sm.init_git_sync(str(bare_remote), tmp_home)
-    assert _git(home, "remote", "get-url", "origin").stdout.strip() == str(bare_remote)
+    home = sm.init_git_sync(f"file://{bare_remote}", tmp_home)
+    assert _git(home, "remote", "get-url", "origin").stdout.strip() == f"file://{bare_remote}"
     assert sm.is_git_enabled(home) is True
 
 
@@ -107,7 +108,7 @@ def test_is_git_enabled_false_without_repo_or_remote(tmp_home, bare_remote):
 
 
 def test_schedule_sync_pushes_to_remote(tmp_home, bare_remote):
-    home = sm.init_git_sync(str(bare_remote), tmp_home)
+    home = sm.init_git_sync(f"file://{bare_remote}", tmp_home)
     (home / "contexts" / "note.md").write_text("nota di test", encoding="utf-8")
     timer = sm.schedule_sync(home, "test sync")
     assert timer is not None
@@ -128,7 +129,7 @@ def test_schedule_sync_pushes_to_remote(tmp_home, bare_remote):
 
 def test_registry_write_triggers_sync(tmp_home, bare_remote):
     """Integrazione (2.4): una scrittura del registry schedula il sync."""
-    sm.init_git_sync(str(bare_remote), tmp_home)
+    sm.init_git_sync(f"file://{bare_remote}", tmp_home)
     rm.register_session("sid-sync", "Kimi", "2.7", "Test sync")
     _join_pending()
 
@@ -139,7 +140,7 @@ def test_registry_write_triggers_sync(tmp_home, bare_remote):
 
 
 def test_update_triggers_sync(tmp_home, bare_remote):
-    sm.init_git_sync(str(bare_remote), tmp_home)
+    sm.init_git_sync(f"file://{bare_remote}", tmp_home)
     rm.register_session("sid-upd", "Kimi", "2.7", "Prima")
     _join_pending()
     rm.update_session("sid-upd", working_on="Dopo")
@@ -150,7 +151,7 @@ def test_update_triggers_sync(tmp_home, bare_remote):
 
 
 def test_gitignore_respected(tmp_home, bare_remote):
-    home = sm.init_git_sync(str(bare_remote), tmp_home)
+    home = sm.init_git_sync(f"file://{bare_remote}", tmp_home)
     (home / "locks").mkdir(exist_ok=True)
     (home / "locks" / "a.lock").write_text("lock", encoding="utf-8")
     (home / "wiki.db").write_bytes(b"sqlite")
@@ -168,8 +169,11 @@ def test_gitignore_respected(tmp_home, bare_remote):
 
 
 def test_offline_sync_does_not_raise_and_records_error(tmp_home, tmp_path):
-    # Remote inesistente: nessuna eccezione, last_error valorizzato.
-    sm.init_git_sync(str(tmp_path / "nonexistent.git"), tmp_home)
+    # Remote che sparisce dopo il setup: nessuna eccezione, last_error valorizzato.
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+    sm.init_git_sync(f"file://{bare}", tmp_home)
+    shutil.rmtree(bare)
     rm.register_session("sid-off", "Kimi", "2.7", "Offline")  # non deve sollevare
     _join_pending()
 

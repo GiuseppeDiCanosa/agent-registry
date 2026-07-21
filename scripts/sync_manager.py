@@ -118,33 +118,17 @@ def _ensure_git_identity(home: Path) -> None:
         _git(home, "config", "user.email", "agent-registry@localhost", timeout=15)
 
 
-def init_git_sync(remote_url: str, home: Path | None = None) -> Path:
-    """Inizializza la home come repo git con remote 'origin'.
+def init_git_sync(remote_url: str, home: Path | None = None, confirm_merge: bool = False) -> Path:
+    """Inizializza il git-sync della home delegando a `setup_git_sync`.
 
-    Se la home non esiste la crea (struttura standard + registry.md vuoto);
-    se non è un repo esegue `git init`, scrive `.gitignore` e il primo commit.
-    Se è già un repo configura soltanto il remote.
+    Mantiene il contratto storico (ritorna la home). Solleva RuntimeError se
+    il setup fallisce o richiede una conferma non fornita (`confirm_merge`
+    per l'integrazione con un remote popolato).
     """
-    rm = _registry_manager()
-    home = Path(home) if home is not None else rm.get_registry_home()
-    rm._ensure_structure(home)
-    if not (home / "registry.md").exists():
-        rm._render_view(home)
-
-    if not (home / ".git").exists():
-        _git(home, "init", check=True)
-        _ensure_gitignore(home)
-        _ensure_git_identity(home)
-        if _git(home, "rev-parse", "--verify", "HEAD", timeout=15).returncode != 0:
-            _git(home, "add", "-A", check=True)
-            _git(home, "commit", "-m", "chore: init agent-registry home", check=True)
-
-    remotes = _git(home, "remote", timeout=15).stdout.split()
-    if "origin" in remotes:
-        _git(home, "remote", "set-url", "origin", remote_url, check=True)
-    else:
-        _git(home, "remote", "add", "origin", remote_url, check=True)
-    return home
+    result = setup_git_sync(remote_url, home=home, confirm_merge=confirm_merge)
+    if result["status"] != "ok":
+        raise RuntimeError(result["message"])
+    return Path(home) if home is not None else _default_home()
 
 
 # Pattern per la classificazione degli errori di `git ls-remote` (stderr).
@@ -301,6 +285,47 @@ def _git_error_message(prefix: str, result: subprocess.CompletedProcess[str]) ->
     return f"{prefix}: {output or 'errore sconosciuto'}"
 
 
+def _setup_init_branch(url: str, home: Path) -> dict[str, Any]:
+    """Ramo (a): remote vuoto → init della home come repo git + primo push.
+
+    Se la home non esiste la crea (struttura standard + registry.md vuoto).
+    Un repo esistente senza commit riceve il primo commit (necessario per il
+    push); un repo con commit è toccato solo nella configurazione del remote.
+    """
+    rm = _registry_manager()
+    rm._ensure_structure(home)
+    if not (home / "registry.md").exists():
+        rm._render_view(home)
+
+    if not (home / ".git").exists():
+        _git(home, "init", check=True)
+    _ensure_gitignore(home)
+    _ensure_git_identity(home)
+    if _git(home, "rev-parse", "--verify", "HEAD", timeout=15).returncode != 0:
+        _git(home, "add", "-A", check=True)
+        _git(home, "commit", "-m", "chore: init agent-registry home", check=True)
+
+    remotes = _git(home, "remote", timeout=15).stdout.split()
+    if "origin" in remotes:
+        _git(home, "remote", "set-url", "origin", url, check=True)
+    else:
+        _git(home, "remote", "add", "origin", url, check=True)
+
+    branch = _current_branch(home)
+    push = _git(home, "push", "-u", "origin", branch)
+    if push.returncode != 0:
+        return {
+            "status": "error",
+            "branch": "init",
+            "message": _git_error_message("primo push verso il remote fallito", push),
+        }
+    return {
+        "status": "ok",
+        "branch": "init",
+        "message": f"home inizializzata come repo git e primo push eseguito (branch {branch})",
+    }
+
+
 def _setup_clone_branch(url: str, home: Path) -> dict[str, Any]:
     """Ramo (b): remote popolato, home senza `.git` e senza dati utente.
 
@@ -443,8 +468,10 @@ def setup_git_sync(
       (b) remote popolato + home senza `.git` e senza dati utente → clone;
       (c) remote popolato + home git o con dati utente → integrazione con rebase.
 
-    Ritorna {"status": "ok"|"error", "branch": "init"|"clone"|"integrazione"|None,
-    "message": str}. `confirm_public`/`confirm_merge` sono accettati per il
+    Ritorna {"status": "ok"|"needs_confirm"|"error",
+    "branch": "init"|"clone"|"integrazione"|None, "message": str}.
+    Il ramo integrazione richiede `confirm_merge` (altrimenti risponde
+    "needs_confirm" senza side-effect). `confirm_public` è accettato per il
     contratto dell'endpoint dashboard (verifica repo pubblico: vedi
     `check_github_visibility`).
     """
@@ -459,23 +486,20 @@ def setup_git_sync(
         }
 
     if validation["state"] == "empty":
-        init_git_sync(url, home)
-        branch = _current_branch(home)
-        push = _git(home, "push", "-u", "origin", branch)
-        if push.returncode != 0:
-            return {
-                "status": "error",
-                "branch": "init",
-                "message": _git_error_message("primo push verso il remote fallito", push),
-            }
-        return {
-            "status": "ok",
-            "branch": "init",
-            "message": f"home inizializzata come repo git e primo push eseguito (branch {branch})",
-        }
+        return _setup_init_branch(url, home)
 
     if not (home / ".git").exists() and not _home_has_user_data(home):
         return _setup_clone_branch(url, home)
+    if not confirm_merge:
+        return {
+            "status": "needs_confirm",
+            "reason": "merge_with_local_data",
+            "branch": "integrazione",
+            "message": (
+                "il remote contiene dati e la home ha un repository git o dati locali: "
+                "l'integrazione delle history richiede una conferma esplicita"
+            ),
+        }
     return _setup_integrazione_branch(url, home)
 
 
@@ -633,6 +657,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_init = sub.add_parser("init", help="Inizializza la home come repo git con remote.")
     p_init.add_argument("--git-remote", required=True, help="URL del remote privato (origin).")
+    p_init.add_argument(
+        "--confirm-merge",
+        action="store_true",
+        help="Conferma l'integrazione con un remote popolato senza prompt interattivo.",
+    )
 
     sub.add_parser("sync", help="Forza un sync sincrono (add/commit/pull/push).")
     sub.add_parser("status", help="Mostra lo stato del sync (JSON).")
@@ -644,8 +673,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "init":
-        home = init_git_sync(args.git_remote)
-        print(f"Git-sync inizializzato in {home} (remote: {args.git_remote})")
+        result = setup_git_sync(args.git_remote, confirm_merge=args.confirm_merge)
+        if result["status"] == "needs_confirm":
+            if not sys.stdin.isatty():
+                print(
+                    f"{result['message']}\nRiprova con --confirm-merge per procedere.",
+                    file=sys.stderr,
+                )
+                return 1
+            answer = input(f"{result['message']}\nProcedere con l'integrazione? [s/N] ")
+            if answer.strip().lower() not in ("s", "si", "sì", "y", "yes"):
+                print("Setup annullato.")
+                return 1
+            result = setup_git_sync(args.git_remote, confirm_merge=True)
+        if result["status"] != "ok":
+            print(f"Errore: {result['message']}", file=sys.stderr)
+            return 1
+        print(result["message"])
         return 0
     if args.command == "sync":
         status = sync_now(message="manual sync")

@@ -12,7 +12,7 @@
 
 - [x] 2.1 Funzione `_home_has_user_data(home)` — True se esistono `sessions/*.yaml`, `wiki/*.md` o `contexts/*` con contenuto.
 - [x] 2.2 Funzione `setup_git_sync(url, home=None, confirm_public=False, confirm_merge=False) -> dict` con i tre rami: (a) `init`+push (logica esistente), (b) `clone` in tmp + spostamento `.git` (solo se `_home_has_user_data` è False, altrimenti ramo c), (c) `integrazione`: add remote + fetch + `pull --rebase` sul branch di default del remote, con `--allow-unrelated-histories` se serve + `_resolve_conflict` esistente. Rami (b) e (c) operano sul branch di default del remote (non hardcoded `main`). Ritorna `{status, branch: "init"|"clone"|"integrazione", message}`.
-- [ ] 2.3 `init_git_sync` delega a `setup_git_sync` (contratto CLI `init --git-remote` invariato); nel caso integrazione la CLI richiede conferma interattiva (o flag esplicito) prima di procedere.
+- [x] 2.3 `init_git_sync` delega a `setup_git_sync` (contratto CLI `init --git-remote` invariato); nel caso integrazione la CLI richiede conferma interattiva (o flag esplicito) prima di procedere.
 - [ ] 2.4 Identità git con hostname: `_ensure_git_identity` usa `agent-registry@<socket.gethostname()>` per repo nuovi (D7); repo esistenti non toccati.
 - [ ] 2.5 Test ramo (a) con remote bare `file://` vuoto in `tmp_path`: init + push riusciti.
 - [ ] 2.6 Test ramo (b): remote bare popolato + home senza `.git` senza dati utente → clone, sessioni remote presenti nella home; includere caso branch di default diverso da `main`.
