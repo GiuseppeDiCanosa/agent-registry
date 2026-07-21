@@ -172,6 +172,7 @@ _MALFORMED_PATTERNS = (
     "empty url",
     "no url specified",
     "protocol not supported",
+    "is not supported",
     "does not appear to be a git repository",
     "invalid path",
 )

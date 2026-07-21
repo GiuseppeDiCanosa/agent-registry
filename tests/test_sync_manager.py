@@ -263,3 +263,88 @@ def test_cli_status(tmp_home, capsys):
     assert rc == 0
     status = json.loads(capsys.readouterr().out)
     assert status["enabled"] is False
+
+
+# --- _classify_lsremote_error (stderr realistici) ---
+
+# stderr osservati da git reale (Linux/macOS, locale inglese).
+SSH_DENIED_STDERR = (
+    "git@github.com: Permission denied (publickey).\r\n"
+    "fatal: Could not read from remote repository.\n\n"
+    "Please make sure you have the correct access rights\n"
+    "and the repository exists.\n"
+)
+HTTPS_AUTH_STDERR = (
+    "remote: Invalid username or password.\n"
+    "fatal: Authentication failed for 'https://github.com/owner/repo.git/'\n"
+)
+HTTPS_NO_PROMPT_STDERR = (
+    "fatal: could not read Username for 'https://github.com': "
+    "terminal prompts disabled\n"
+)
+UNRESOLVABLE_HOST_STDERR = (
+    "ssh: Could not resolve hostname githb.com: nodename nor servname provided, "
+    "or not known\n"
+    "fatal: Could not read from remote repository.\n"
+)
+CONNECTION_REFUSED_STDERR = (
+    "fatal: unable to connect to 10.0.0.1:\n"
+    "10.0.0.1: Connection refused\n"
+)
+CONNECTION_TIMEOUT_STDERR = (
+    "ssh: connect to host example.com port 22: Operation timed out\n"
+    "fatal: Could not read from remote repository.\n"
+)
+MALFORMED_URL_STDERR = (
+    "fatal: protocol 'htp' is not supported\n"
+)
+UNKNOWN_STDERR = (
+    "fatal: unexpected git failure: some exotic backend error\n"
+)
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [SSH_DENIED_STDERR, HTTPS_AUTH_STDERR, HTTPS_NO_PROMPT_STDERR],
+)
+def test_classify_lsremote_error_auth_failed(stderr):
+    kind, detail = sm._classify_lsremote_error(stderr, 128)
+    assert kind == "auth_failed"
+    assert "autenticazione" in detail
+
+
+def test_classify_lsremote_error_unreachable_host():
+    kind, _ = sm._classify_lsremote_error(UNRESOLVABLE_HOST_STDERR, 128)
+    assert kind == "unreachable"
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [CONNECTION_REFUSED_STDERR, CONNECTION_TIMEOUT_STDERR],
+)
+def test_classify_lsremote_error_unreachable_network(stderr):
+    kind, _ = sm._classify_lsremote_error(stderr, 128)
+    assert kind == "unreachable"
+
+
+def test_classify_lsremote_error_malformed_url():
+    kind, _ = sm._classify_lsremote_error(MALFORMED_URL_STDERR, 128)
+    assert kind == "malformed_url"
+
+
+def test_classify_lsremote_error_unknown_keeps_raw_stderr():
+    kind, detail = sm._classify_lsremote_error(UNKNOWN_STDERR, 42)
+    assert kind == "unknown"
+    assert "exotic backend error" in detail  # stderr grezzo allegato
+    assert "42" in detail  # exit code allegato
+
+
+def test_classify_lsremote_error_empty_stderr_is_unknown():
+    kind, detail = sm._classify_lsremote_error("", 128)
+    assert kind == "unknown"
+    assert "nessun output" in detail
+
+
+def test_classify_lsremote_error_case_insensitive():
+    kind, _ = sm._classify_lsremote_error("FATAL: PERMISSION DENIED (PUBLICKEY).", 128)
+    assert kind == "auth_failed"

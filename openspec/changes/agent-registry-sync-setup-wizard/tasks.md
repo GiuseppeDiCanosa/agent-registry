@@ -6,7 +6,7 @@
 
 - [x] 1.1 In `scripts/sync_manager.py`: funzione `_classify_lsremote_error(stderr, returncode)` pura che classifica in `malformed_url | auth_failed | unreachable | unknown` (pattern multipli su stderr, fallback unknown con stderr allegato).
 - [x] 1.2 Funzione `validate_remote(url) -> dict` (`{ok, state: "empty"|"populated", error_kind?, message?}`) che esegue `git ls-remote` con `GIT_TERMINAL_PROMPT=0` e timeout 30s, usando `_classify_lsremote_error`.
-- [ ] 1.3 Test unitari di `_classify_lsremote_error` su stderr realistici (SSH denied, HTTPS auth, host irrisolvibile, timeout, URL malformato).
+- [x] 1.3 Test unitari di `_classify_lsremote_error` su stderr realistici (SSH denied, HTTPS auth, host irrisolvibile, timeout, URL malformato).
 
 ## 2. Setup a tre rami (D2, D7)
 
