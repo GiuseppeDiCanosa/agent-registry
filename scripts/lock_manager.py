@@ -171,12 +171,15 @@ def _read_info(lock_file: Path) -> dict:
         return {}
 
 
-def _write_info(fd: int, session_id: str) -> None:
-    payload = f"{session_id}|{time.time()}".encode("utf-8")
+def _write_info(fd: int, session_id: str, sync: bool = True) -> None:
     os.ftruncate(fd, 0)
     os.lseek(fd, 0, os.SEEK_SET)
+    # Timestamp catturato il più tardi possibile: è il riferimento da cui
+    # is_locked misura l'age, quindi ogni ms speso prima slitta la freschezza.
+    payload = f"{session_id}|{time.time()}".encode("utf-8")
     os.write(fd, payload)
-    os.fsync(fd)
+    if sync:
+        os.fsync(fd)
 
 
 def _is_stale(info: dict, timeout: int) -> bool:
@@ -327,12 +330,17 @@ def heartbeat(path: str, session_id: str) -> dict:
         }
     fd = _OPEN_LOCK_FDS.get(path)
     if fd is not None:
-        _write_info(fd, session_id)
+        # Niente fsync sull'heartbeat: se il processo crasha gli heartbeat
+        # cessano comunque e il lock diventa stale (fallimento sicuro);
+        # la durabilità oltre la morte del processo è richiesta dalla spec
+        # solo in acquisizione. Saltare l'fsync riduce la finestra fra il
+        # rinnovo e la misura dell'age da parte degli altri agenti.
+        _write_info(fd, session_id, sync=False)
         return {"ok": True}
     # Se non abbiamo il fd aperto, apriamo e scriviamo (caso loop heartbeat riavviato)
     try:
         with open(lock_file, "r+", encoding="utf-8") as f:
-            _write_info(f.fileno(), session_id)
+            _write_info(f.fileno(), session_id, sync=False)
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
