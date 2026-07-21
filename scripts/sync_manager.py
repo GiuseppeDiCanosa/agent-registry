@@ -145,6 +145,62 @@ def init_git_sync(remote_url: str, home: Path | None = None) -> Path:
     return home
 
 
+# Pattern per la classificazione degli errori di `git ls-remote` (stderr).
+_AUTH_PATTERNS = (
+    "permission denied",
+    "authentication failed",
+    "could not read username",
+    "could not read password",
+    "terminal prompts disabled",
+    "invalid username or password",
+    "access denied",
+)
+_UNREACHABLE_PATTERNS = (
+    "could not resolve hostname",
+    "name or service not known",
+    "failed to connect",
+    "connection refused",
+    "connection timed out",
+    "operation timed out",
+    "network is unreachable",
+    "no route to host",
+)
+_MALFORMED_PATTERNS = (
+    "invalid url",
+    "invalid protocol",
+    "bad url",
+    "empty url",
+    "no url specified",
+    "protocol not supported",
+    "does not appear to be a git repository",
+    "invalid path",
+)
+
+
+def _classify_lsremote_error(stderr: str, returncode: int) -> tuple[str, str]:
+    """Classifica l'errore di `git ls-remote` in (kind, dettaglio).
+
+    kind ∈ {"malformed_url", "auth_failed", "unreachable", "unknown"}.
+    Matching multi-pattern su stderr (case-insensitive); per "unknown" il
+    dettaglio allega lo stderr grezzo per la diagnosi.
+    """
+    text = (stderr or "").lower()
+    if any(p in text for p in _AUTH_PATTERNS):
+        kind = "auth_failed"
+        detail = "autenticazione fallita verso il remote (chiave SSH o token HTTPS)"
+    elif any(p in text for p in _MALFORMED_PATTERNS):
+        kind = "malformed_url"
+        detail = "URL del remote malformato o non riconosciuto da git"
+    elif any(p in text for p in _UNREACHABLE_PATTERNS):
+        kind = "unreachable"
+        detail = "remote non raggiungibile (rete o host non disponibile)"
+    else:
+        kind = "unknown"
+        raw = (stderr or "").strip()
+        detail = f"errore git non classificato (exit {returncode}): {raw or 'nessun output'}"
+    return kind, detail
+
+
 def _status_path(home: Path) -> Path:
     return home / SYNC_STATUS_FILE
 
