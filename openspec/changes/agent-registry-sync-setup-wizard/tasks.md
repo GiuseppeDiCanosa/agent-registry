@@ -38,7 +38,7 @@
 
 - [x] 5.1 In `static/index.html`: setup card in cima visibile quando `GET /api/sync` → `enabled: false` (campo URL, bottone "Configura multi-macchina", area messaggi esito/errore, checkbox conferma per repo pubblico quando richiesta).
 - [x] 5.2 Al successo: card nascosta, stato sync normale visibile; aggiornamento via refresh stato esistente (SSE/polling).
-- [ ] 5.3 Verifica manuale in browser: card presente senza sync, setup riuscito end-to-end con remote bare locale, card assente dopo.
+- [x] 5.3 Verifica manuale in browser: card presente senza sync, setup riuscito end-to-end con remote bare locale, card assente dopo.
 
 ## 6. Trigger agente in SKILL.md (D6)
 
@@ -47,7 +47,7 @@
 
 ## 7. Chiusura
 
-- [ ] 7.1 Suite completa verde nel repo standalone (`python3 -m pytest tests/ -q`).
+- [x] 7.1 Suite completa verde nel repo standalone (`python3 -m pytest tests/ -q`).
 
 ## Passi manuali post-loop (fuori dal loop, eseguiti dall'operatore)
 
