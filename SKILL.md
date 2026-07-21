@@ -96,6 +96,28 @@ STATUS, ETÀ) più lo stato del git-sync. Filtri opzionali:
 Identifica quali file/aree sono `do_not_touch` per altri agenti con status
 `OnWorking` (leggendo `registry.md` nella home o con `show`).
 
+### 1b. Configura il multi-macchina (se non è già fatto)
+
+Dopo `status`, se il git-sync risulta `enabled: false`, proponi all'utente di
+configurarlo. Se l'utente accetta:
+
+1. Avvia la dashboard in background:
+   ```bash
+   cd .agents/skills/agent-registry/scripts/webapp
+   uvicorn main:app --host 127.0.0.1 --port 8765 &
+   ```
+2. Se la porta 8765 è occupata, verifica con `GET http://127.0.0.1:8765/api/sync`
+   che sia la dashboard del registry; se sì, riusa quella, altrimenti scegli
+   una porta libera (es. 8766) e rilancia.
+3. Apri il browser:
+   ```bash
+   open http://127.0.0.1:8765
+   ```
+4. Chiedi all'utente di incollare l'URL del remote privato nella setup card.
+
+Se l'utente rifiuta o ignora la proposta, NON riproporla nella stessa sessione
+e prosegui in modalità single-macchina.
+
 ### 2. Registra la sessione
 
 ```bash
@@ -315,46 +337,30 @@ La convenzione è 1:1 — ogni sessione agente salva un handoff e ne registra il
 
 ---
 
-## Riferimento comandi completo
+## Riferimento comandi
 
-### `registry_manager.py`
+Sintassi completa (dettagli d'uso nelle sezioni del flusso sopra).
 
-| Comando | Sintassi | Scopo |
-|---|---|---|
-| `register` | `register <session_id> <provider> <ai_version> <working_on> [--space CSV] [--todo-present CSV]` | registra la sessione (cattura pid, cmdline, project, git_branch) |
-| `update` | `update <session_id> [--working-on S] [--todo-past CSV] [--todo-present CSV] [--todo-future CSV] [--space CSV] [--do-not-touch CSV] [--issues S] [--status S]` | aggiorna i campi di una sessione |
-| `finish` | `finish <session_id>` | marca `Finished` e svuota `do_not_touch` |
-| `handoff` | `handoff <session_id> <handoff_path>` | registra il riferimento a un handoff |
-| `show` | `show` | sessioni come dict (una per riga) |
-| `status` | `status [--status S] [--provider P] [--project P]` | tabella human-readable + stato git-sync |
-| `cleanup` | `cleanup` | marca `Stop` le sessioni zombie e rilascia i lock |
-| `kill` | `kill <session_id> [--force]` | kill reale via PID o stop logico; marca `Killed`, rilascia lock |
-| `context log` | `context log <session_id> "<entry>"` | appende una entry al context file |
-| `end` | `end <session_id> [--router S] [--cosa S] [--come S] [--risolto S] [--bug CSV] [--skill-tool CSV]` | distilla il context in wiki entry e chiude la sessione |
-| `wiki query` | `wiki query "<domanda>"` | router: il lavoro è già stato svolto? |
-| `wiki show` | `wiki show <id\|session_id>` | entry wiki completa (JSON) |
-| `wiki ingest` | `wiki ingest <session_id>` | ingestione LLM: genera il campo `router` |
-| `wiki ingest-pending` | `wiki ingest-pending` | ingestisce tutte le entry `pending_ingest` |
-| `wiki rebuild` | `wiki rebuild` | ricostruisce il DB dai `wiki/*.md` |
+`registry_manager.py`:
 
-### `lock_manager.py`
+- `register <session_id> <provider> <ai_version> <working_on> [--space CSV] [--todo-present CSV]`
+- `update <session_id> [--working-on S] [--todo-past CSV] [--todo-present CSV] [--todo-future CSV] [--space CSV] [--do-not-touch CSV] [--issues S] [--status S]`
+- `finish <session_id>` · `handoff <session_id> <path>` · `show` · `cleanup`
+- `status [--status S] [--provider P] [--project P]`
+- `kill <session_id> [--force]`
+- `context log <session_id> "<entry>"`
+- `end <session_id> [--router S] [--cosa S] [--come S] [--risolto S] [--bug CSV] [--skill-tool CSV]`
+- `wiki query "<domanda>"` · `wiki show <id|session_id>` · `wiki ingest <session_id>` · `wiki ingest-pending` · `wiki rebuild`
 
-| Comando | Sintassi | Scopo |
-|---|---|---|
-| `acquire` | `acquire <path> <session_id>` | acquisisce il lock (+ sync `do_not_touch`/`space`) |
-| `release` | `release <path> <session_id>` | rilascia il lock (solo l'owner) |
-| `check` | `check <path1> [path2 ...] [--session-id S]` | stato batch: free / locked / locked-by-me / stale |
-| `heartbeat` | `heartbeat <path> <session_id>` | rinnova il timestamp del lock |
-| `heartbeat-loop` | `heartbeat-loop <path> <session_id> [interval=30]` | loop di heartbeat (da lanciare in background) |
+`lock_manager.py`:
 
-### `sync_manager.py`
+- `acquire <path> <session_id>` · `release <path> <session_id>`
+- `check <path1> [path2 ...] [--session-id S]`
+- `heartbeat <path> <session_id>` · `heartbeat-loop <path> <session_id> [interval=30]`
 
-| Comando | Sintassi | Scopo |
-|---|---|---|
-| `init` | `init --git-remote <url>` | inizializza la home come repo git con remote privato |
-| `sync` | `sync` | forza un sync sincrono (add/commit/pull --rebase/push) |
-| `status` | `status` | stato del sync (JSON) |
-| `fetch-remote` | `fetch-remote <owner/repo> [--branch main]` | legge `registry.md` remoto via GitHub API (read-only) |
+`sync_manager.py`:
+
+- `init --git-remote <url>` · `sync` · `status` · `fetch-remote <owner/repo> [--branch main]`
 
 ---
 
@@ -451,7 +457,7 @@ testuale FTS5 senza ranking LLM (fallback D8).
 │   └── registry-template.md          # vista vuota (fallback creazione manuale)
 ├── evals/
 │   └── evals.json                    # eval della skill
-├── tests/                            # suite pytest (121 test)
+├── tests/                            # suite pytest
 └── scripts/
     ├── requirements.txt              # PyYAML, langchain, langchain-openai
     ├── registry_manager.py           # sessioni, vista, cleanup, kill, context, end, wiki CLI
