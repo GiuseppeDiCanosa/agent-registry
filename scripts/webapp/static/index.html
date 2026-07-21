@@ -188,6 +188,44 @@
         .sync-ok { color: var(--ok); }
         .sync-off { color: var(--muted); }
         .sync-err { color: var(--warn); }
+        .setup-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+        }
+        .setup-card h2 { margin: 0 0 0.5rem; font-size: 1.1rem; color: var(--accent); }
+        .setup-card p { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.9rem; }
+        .setup-card input[type="text"] {
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.4rem 0.6rem;
+            width: min(100%, 480px);
+            font-size: 0.9rem;
+        }
+        .setup-card label.confirm {
+            display: block;
+            margin: 0.75rem 0;
+            font-size: 0.85rem;
+            color: var(--warn);
+        }
+        .setup-card .setup-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+        .setup-card .setup-msg {
+            margin-top: 0.75rem;
+            font-size: 0.85rem;
+        }
+        .setup-card .setup-msg.ok { color: var(--ok); }
+        .setup-card .setup-msg.err { color: var(--danger); }
+        .setup-card.hidden { display: none; }
     </style>
 </head>
 <body>
@@ -202,6 +240,22 @@
     <main>
         <div class="meta" id="registry-path">Registry: —</div>
         <div class="notice" id="notice"></div>
+
+        <div class="setup-card" id="setup-card">
+            <h2>Configura il multi-macchina</h2>
+            <p>Il git-sync non è configurato. Inserisci l'URL di un repository git privato per sincronizzare questa home su più macchine.</p>
+            <input type="text" id="setup-url" placeholder="git@github.com:tuo-user/agent-registry.git">
+            <label class="confirm hidden" id="setup-confirm-public">
+                <input type="checkbox" id="setup-confirm-public-check"> Confermo: il repository è pubblico e accetto il rischio di esporre contesto di lavoro
+            </label>
+            <label class="confirm hidden" id="setup-confirm-merge">
+                <input type="checkbox" id="setup-confirm-merge-check"> Confermo: integrare i dati locali con quelli del remote
+            </label>
+            <div class="setup-actions">
+                <button class="action" id="setup-btn">Configura multi-macchina</button>
+            </div>
+            <div class="setup-msg" id="setup-msg"></div>
+        </div>
 
         <div class="tabs">
             <button class="tab-btn active" id="tab-sessions">Sessioni</button>
@@ -397,7 +451,110 @@
             `;
         }
 
+        const setupCard = document.getElementById('setup-card');
+        const setupUrl = document.getElementById('setup-url');
+        const setupBtn = document.getElementById('setup-btn');
+        const setupMsg = document.getElementById('setup-msg');
+        const setupConfirmPublic = document.getElementById('setup-confirm-public');
+        const setupConfirmPublicCheck = document.getElementById('setup-confirm-public-check');
+        const setupConfirmMerge = document.getElementById('setup-confirm-merge');
+        const setupConfirmMergeCheck = document.getElementById('setup-confirm-merge-check');
+
+        let lastSyncEnabled = false;
+        let pendingConfirm = null; // {reason, url}
+
+        function setSetupMsg(text, ok) {
+            setupMsg.textContent = text;
+            setupMsg.className = 'setup-msg ' + (ok ? 'ok' : 'err');
+        }
+
+        function resetSetupConfirm() {
+            pendingConfirm = null;
+            setupConfirmPublic.classList.add('hidden');
+            setupConfirmPublicCheck.checked = false;
+            setupConfirmMerge.classList.add('hidden');
+            setupConfirmMergeCheck.checked = false;
+            setupBtn.textContent = 'Configura multi-macchina';
+        }
+
+        function hideSetupCard() {
+            setupCard.classList.add('hidden');
+        }
+
+        function updateSetupVisibility(sync) {
+            const enabled = sync && sync.enabled;
+            if (lastSyncEnabled !== enabled) {
+                lastSyncEnabled = enabled;
+                if (enabled) {
+                    hideSetupCard();
+                } else {
+                    setupCard.classList.remove('hidden');
+                }
+            }
+        }
+
+        async function submitSetup() {
+            const url = setupUrl.value.trim();
+            if (!url) {
+                setSetupMsg('Inserisci un URL remote.', false);
+                return;
+            }
+            const body = { url };
+            if (pendingConfirm) {
+                if (pendingConfirm.reason === 'public_repo') {
+                    if (!setupConfirmPublicCheck.checked) {
+                        setSetupMsg('Conferma il repository pubblico per procedere.', false);
+                        return;
+                    }
+                    body.confirm_public = true;
+                } else if (pendingConfirm.reason === 'merge_with_local_data') {
+                    if (!setupConfirmMergeCheck.checked) {
+                        setSetupMsg('Conferma l\'integrazione dei dati locali per procedere.', false);
+                        return;
+                    }
+                    body.confirm_merge = true;
+                }
+            }
+            try {
+                const res = await fetch('/api/sync/init', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (data.status === 'needs_confirm') {
+                    pendingConfirm = { reason: data.reason, url };
+                    if (data.reason === 'public_repo') {
+                        setupConfirmPublic.classList.remove('hidden');
+                        setupBtn.textContent = 'Conferma e configura';
+                        setSetupMsg(data.message + ' Spunta la conferma e riprova.', false);
+                    } else if (data.reason === 'merge_with_local_data') {
+                        setupConfirmMerge.classList.remove('hidden');
+                        setupBtn.textContent = 'Conferma e configura';
+                        setSetupMsg(data.message + ' Spunta la conferma e riprova.', false);
+                    } else {
+                        setSetupMsg('Conferma richiesta: ' + data.message, false);
+                    }
+                    return;
+                }
+                if (data.status === 'ok') {
+                    resetSetupConfirm();
+                    setSetupMsg('Setup completato: ' + data.message, true);
+                    hideSetupCard();
+                    return;
+                }
+                // error
+                setSetupMsg('Setup fallito: ' + (data.message || res.status), false);
+            } catch (err) {
+                setSetupMsg('Errore di rete: ' + err, false);
+            }
+        }
+
+        setupBtn.addEventListener('click', submitSetup);
+        setupUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitSetup(); });
+
         function renderSync(sync) {
+            updateSetupVisibility(sync);
             if (!sync || !sync.enabled) {
                 syncEl.textContent = 'git-sync: disabilitato';
                 syncEl.className = 'status sync-off';

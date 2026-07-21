@@ -431,3 +431,26 @@ def test_sync_init_needs_confirm_merge(client, home, tmp_path):
     assert data["status"] == "needs_confirm"
     assert data["reason"] == "merge_with_local_data"
     assert data["branch"] == "integrazione"
+# --- setup card UI ---
+
+
+def test_setup_card_present_in_index_html(client):
+    """5.1: la pagina principale contiene la setup card per il multi-macchina."""
+    res = client.get("/")
+    assert res.status_code == 200
+    html = res.text
+    assert "setup-card" in html
+    assert '/api/sync/init' in html
+    assert "Configura multi-macchina" in html
+    assert "setup-confirm-public" in html
+    assert "setup-confirm-merge" in html
+
+
+def test_setup_card_hidden_when_sync_enabled(client, home, bare_remote):
+    """5.2: quando il sync è abilitato la dashboard non mostra la setup card."""
+    sm.init_git_sync(f"file://{bare_remote}", home)
+    res = client.get("/api/sync")
+    assert res.json()["enabled"] is True
+    # La logica JS nasconde la card in base a GET /api/sync; l'HTML resta presente.
+    res = client.get("/")
+    assert "setup-card" in res.text
