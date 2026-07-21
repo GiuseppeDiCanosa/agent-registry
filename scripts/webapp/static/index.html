@@ -30,6 +30,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
         }
         h1 { margin: 0; font-size: 1.4rem; }
         .status {
@@ -38,12 +40,74 @@
         }
         .status.connected { color: var(--ok); }
         .status.disconnected { color: var(--danger); }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
         main { padding: 2rem; }
         .meta {
             margin-bottom: 1rem;
             color: var(--muted);
             font-size: 0.9rem;
         }
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .tab-btn {
+            padding: 0.4rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--panel);
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .tab-btn.active {
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+        .filters {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+            padding: 0.75rem 1rem;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .filters label {
+            font-size: 0.8rem;
+            color: var(--muted);
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+        .filters input, .filters select {
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.3rem 0.5rem;
+            font-size: 0.85rem;
+        }
+        button.action {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 0.35rem 0.8rem;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        button.action:hover { opacity: 0.85; }
+        button.danger { background: var(--danger); }
+        button.warn { background: var(--warn); color: #111; }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -65,6 +129,8 @@
             font-weight: 600;
         }
         tr:last-child td { border-bottom: none; }
+        tr.wiki-row { cursor: pointer; }
+        tr.wiki-row:hover td { background: rgba(79, 140, 255, 0.06); }
         .empty {
             padding: 3rem;
             text-align: center;
@@ -81,58 +147,124 @@
         .badge-onworking { background: rgba(79, 140, 255, 0.15); color: var(--accent); }
         .badge-finished { background: rgba(46, 204, 113, 0.15); color: var(--ok); }
         .badge-stop { background: rgba(241, 196, 15, 0.15); color: var(--warn); }
+        .badge-killed { background: rgba(231, 76, 60, 0.15); color: var(--danger); }
+        .badge-stale { background: rgba(241, 196, 15, 0.15); color: var(--warn); }
+        .badge-live { background: rgba(46, 204, 113, 0.15); color: var(--ok); }
         .cell-list {
             max-width: 220px;
             white-space: pre-wrap;
             word-break: break-word;
         }
         .issues { color: var(--danger); }
+        .section-title {
+            margin: 1.5rem 0 0.75rem;
+            font-size: 1rem;
+            color: var(--muted);
+        }
+        .notice {
+            margin: 0.75rem 0;
+            padding: 0.6rem 1rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            font-size: 0.85rem;
+            display: none;
+        }
+        .notice.ok { border-color: var(--ok); color: var(--ok); }
+        .notice.err { border-color: var(--danger); color: var(--danger); }
+        .detail-row td {
+            background: #10131a;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            gap: 0.3rem 1rem;
+            font-size: 0.85rem;
+        }
+        .detail-grid dt { color: var(--muted); }
+        .detail-grid dd { margin: 0; }
+        .sync-ok { color: var(--ok); }
+        .sync-off { color: var(--muted); }
+        .sync-err { color: var(--warn); }
     </style>
 </head>
 <body>
     <header>
         <h1>🧭 Agent Registry Dashboard</h1>
-        <div id="connection-status" class="status">Connessione in corso...</div>
+        <div class="header-right">
+            <div id="sync-status" class="status sync-off">git-sync: —</div>
+            <button class="action warn" id="cleanup-btn">Cleanup zombie</button>
+            <div id="connection-status" class="status">Connessione in corso...</div>
+        </div>
     </header>
     <main>
         <div class="meta" id="registry-path">Registry: —</div>
-        <div id="table-container">
-            <div class="empty">Caricamento in corso...</div>
+        <div class="notice" id="notice"></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" id="tab-sessions">Sessioni</button>
+            <button class="tab-btn" id="tab-wiki">Wiki</button>
         </div>
+
+        <section id="view-sessions">
+            <div class="filters">
+                <label>Data
+                    <input type="date" id="filter-date">
+                </label>
+                <label>Provider
+                    <select id="filter-provider"><option value="">Tutti</option></select>
+                </label>
+                <label>Status
+                    <select id="filter-status">
+                        <option value="OnWorking" selected>OnWorking</option>
+                        <option value="Stop">Stop</option>
+                        <option value="Finished">Finished</option>
+                        <option value="Killed">Killed</option>
+                        <option value="">Tutti</option>
+                    </select>
+                </label>
+            </div>
+            <div id="table-container">
+                <div class="empty">Caricamento in corso...</div>
+            </div>
+
+            <h2 class="section-title">Lock attivi</h2>
+            <div id="locks-container">
+                <div class="empty">Nessun lock attivo.</div>
+            </div>
+        </section>
+
+        <section id="view-wiki" style="display:none">
+            <div class="filters">
+                <label>Ricerca (router / cosa fatto / bug)
+                    <input type="text" id="wiki-q" placeholder="lascia vuoto per le ultime entry" size="40">
+                </label>
+                <button class="action" id="wiki-search-btn">Cerca</button>
+            </div>
+            <div id="wiki-container">
+                <div class="empty">Caricamento in corso...</div>
+            </div>
+        </section>
     </main>
 
     <script>
         const statusEl = document.getElementById('connection-status');
+        const syncEl = document.getElementById('sync-status');
         const pathEl = document.getElementById('registry-path');
         const containerEl = document.getElementById('table-container');
+        const locksEl = document.getElementById('locks-container');
+        const noticeEl = document.getElementById('notice');
+        const dateEl = document.getElementById('filter-date');
+        const providerEl = document.getElementById('filter-provider');
+        const statusFilterEl = document.getElementById('filter-status');
 
-        function renderAgent(a) {
-            const statusClass = {
-                'OnWorking': 'badge-onworking',
-                'Finished': 'badge-finished',
-                'Stop': 'badge-stop'
-            }[a.status] || 'badge-stop';
+        let lastAgents = [];
+        let lastLocks = [];
 
-            const todo = a.todo || {};
-            const fmtList = (arr) => Array.isArray(arr) && arr.length ? arr.join('\n') : '—';
-
-            return `
-                <tr>
-                    <td><strong>${escapeHtml(a.session_id)}</strong></td>
-                    <td>${escapeHtml(a.provider)}<br><span style="color:var(--muted);font-size:0.8rem">${escapeHtml(a.ai_version)}</span></td>
-                    <td>${escapeHtml(a.started_at)}</td>
-                    <td>${escapeHtml(a.working_on)}</td>
-                    <td class="cell-list">${escapeHtml(fmtList(todo.past))}</td>
-                    <td class="cell-list">${escapeHtml(fmtList(todo.present))}</td>
-                    <td class="cell-list">${escapeHtml(fmtList(todo.future))}</td>
-                    <td class="cell-list">${escapeHtml(fmtList(a.space))}</td>
-                    <td class="cell-list">${escapeHtml(fmtList(a.do_not_touch))}</td>
-                    <td><span class="badge ${statusClass}">${escapeHtml(a.status)}</span></td>
-                    <td class="issues">${escapeHtml(a.issues || '—')}</td>
-                    <td class="cell-list">${escapeHtml(a.handoff || '—')}</td>
-                </tr>
-            `;
-        }
+        // Default: data odierna (locale del browser, coerente con Roma per l'utente)
+        dateEl.value = new Date().toLocaleDateString('sv-SE');
 
         function escapeHtml(text) {
             if (text === null || text === undefined) return '';
@@ -144,17 +276,81 @@
                 .replace(/'/g, '&#039;');
         }
 
-        function render(data) {
-            pathEl.textContent = `Registry: ${data.registry_path}`;
-            const agents = data.agents || [];
-            const working = agents.filter(a => a.status === 'OnWorking');
+        function showNotice(text, ok) {
+            noticeEl.textContent = text;
+            noticeEl.className = 'notice ' + (ok ? 'ok' : 'err');
+            noticeEl.style.display = 'block';
+            setTimeout(() => { noticeEl.style.display = 'none'; }, 8000);
+        }
 
-            if (working.length === 0) {
-                containerEl.innerHTML = '<div class="empty">Nessun agente attivo al momento.</div>';
+        function badge(status) {
+            const cls = {
+                'OnWorking': 'badge-onworking',
+                'Finished': 'badge-finished',
+                'Stop': 'badge-stop',
+                'Killed': 'badge-killed'
+            }[status] || 'badge-stop';
+            return `<span class="badge ${cls}">${escapeHtml(status)}</span>`;
+        }
+
+        function currentFilters() {
+            return {
+                date: dateEl.value || '',
+                provider: providerEl.value || '',
+                status: statusFilterEl.value
+            };
+        }
+
+        function applyFilters(agents) {
+            const f = currentFilters();
+            return (agents || []).filter(a => {
+                if (f.date && !String(a.started_at || '').startsWith(f.date)) return false;
+                if (f.provider && a.provider !== f.provider) return false;
+                if (f.status && a.status !== f.status) return false;
+                return true;
+            });
+        }
+
+        function updateProviderOptions(agents) {
+            const current = providerEl.value;
+            const providers = [...new Set((agents || []).map(a => a.provider).filter(Boolean))].sort();
+            providerEl.innerHTML = '<option value="">Tutti</option>' +
+                providers.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+            if (providers.includes(current)) providerEl.value = current;
+        }
+
+        function renderAgent(a) {
+            const todo = a.todo || {};
+            const fmtList = (arr) => Array.isArray(arr) && arr.length ? arr.join('\n') : '—';
+            const killBtn = a.status === 'OnWorking'
+                ? `<button class="action danger" onclick="killSession('${escapeHtml(a.session_id)}')">Kill</button>`
+                : '';
+            return `
+                <tr>
+                    <td><strong>${escapeHtml(a.session_id)}</strong><br><span style="color:var(--muted);font-size:0.8rem">${escapeHtml(a.project || '')} ${escapeHtml(a.git_branch || '')}</span></td>
+                    <td>${escapeHtml(a.provider)}<br><span style="color:var(--muted);font-size:0.8rem">${escapeHtml(a.ai_version)}</span></td>
+                    <td>${escapeHtml(a.started_at)}</td>
+                    <td>${escapeHtml(a.working_on)}</td>
+                    <td class="cell-list">${escapeHtml(fmtList(todo.past))}</td>
+                    <td class="cell-list">${escapeHtml(fmtList(todo.present))}</td>
+                    <td class="cell-list">${escapeHtml(fmtList(todo.future))}</td>
+                    <td class="cell-list">${escapeHtml(fmtList(a.space))}</td>
+                    <td class="cell-list">${escapeHtml(fmtList(a.do_not_touch))}</td>
+                    <td>${badge(a.status)}</td>
+                    <td class="issues">${escapeHtml(a.issues || '—')}</td>
+                    <td class="cell-list">${escapeHtml(a.handoff || '—')}</td>
+                    <td>${killBtn}</td>
+                </tr>
+            `;
+        }
+
+        function renderSessions() {
+            const filtered = applyFilters(lastAgents);
+            if (filtered.length === 0) {
+                containerEl.innerHTML = '<div class="empty">Nessuna sessione corrisponde ai filtri.</div>';
                 return;
             }
-
-            const rows = working.map(renderAgent).join('');
+            const rows = filtered.map(renderAgent).join('');
             containerEl.innerHTML = `
                 <table>
                     <thead>
@@ -171,6 +367,7 @@
                             <th>Status</th>
                             <th>Issues</th>
                             <th>Handoff</th>
+                            <th>Azioni</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -178,6 +375,239 @@
             `;
         }
 
+        function renderLocks() {
+            if (!lastLocks.length) {
+                locksEl.innerHTML = '<div class="empty">Nessun lock attivo.</div>';
+                return;
+            }
+            const rows = lastLocks.map(l => `
+                <tr>
+                    <td class="cell-list">${escapeHtml(l.path)}</td>
+                    <td>${escapeHtml(l.session_id)}</td>
+                    <td>${Math.round(l.age)}s</td>
+                    <td>${l.stale ? '<span class="badge badge-stale">stale</span>' : '<span class="badge badge-live">attivo</span>'}</td>
+                    <td><button class="action warn" onclick="forceRelease('${escapeHtml(l.path)}', '${escapeHtml(l.session_id)}')">Force release</button></td>
+                </tr>
+            `).join('');
+            locksEl.innerHTML = `
+                <table>
+                    <thead><tr><th>Path</th><th>Owner</th><th>Age</th><th>Stato</th><th>Azioni</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        function renderSync(sync) {
+            if (!sync || !sync.enabled) {
+                syncEl.textContent = 'git-sync: disabilitato';
+                syncEl.className = 'status sync-off';
+                return;
+            }
+            let text = 'git-sync: attivo';
+            if (sync.last_sync_at) text += ` • ultimo: ${sync.last_sync_at}`;
+            if (sync.pending) text += ' • in sospeso';
+            if (sync.last_error) text += ` • errore: ${sync.last_error}`;
+            syncEl.textContent = text;
+            syncEl.className = 'status ' + (sync.last_error ? 'sync-err' : 'sync-ok');
+        }
+
+        function render(data) {
+            pathEl.textContent = `Registry: ${data.registry_path}`;
+            lastAgents = data.agents || [];
+            lastLocks = data.locks || [];
+            updateProviderOptions(lastAgents);
+            renderSessions();
+            renderLocks();
+            renderSync(data.sync);
+        }
+
+        async function killSession(sessionId) {
+            const msg = `Kill della sessione "${sessionId}".\n\n` +
+                `Se il processo è su questa macchina (PID verificabile) verrà TERMINATO realmente (SIGTERM → SIGKILL).\n` +
+                `Altrimenti la sessione sarà solo marcata Killed (stop logico) e i suoi lock rilasciati.\n\nProcedere?`;
+            if (!confirm(msg)) return;
+            try {
+                const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/kill`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({})
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    const azione = data.action === 'process_terminated'
+                        ? 'processo terminato realmente'
+                        : 'stop logico (processo non su questa macchina o non verificabile)';
+                    showNotice(`Sessione ${sessionId}: Killed — ${azione}. ${data.note || ''}`, true);
+                } else {
+                    showNotice(`Kill fallito: ${data.error || res.status}`, false);
+                }
+            } catch (err) {
+                showNotice(`Kill fallito: ${err}`, false);
+            }
+        }
+
+        async function forceRelease(path, sessionId) {
+            await forceReleaseAttempt(path, sessionId, false);
+        }
+
+        async function forceReleaseAttempt(path, sessionId, confirmed) {
+            try {
+                const res = await fetch('/api/locks/force-release', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({path, session_id: sessionId, confirm: confirmed})
+                });
+                const data = await res.json();
+                if (res.status === 409 && data.warning) {
+                    if (confirm(`⚠️ ${data.warning}\n\nForzare il rilascio?`)) {
+                        await forceReleaseAttempt(path, sessionId, true);
+                    }
+                    return;
+                }
+                if (res.ok && data.released !== false) {
+                    showNotice(`Lock rilasciato: ${path} (owner: ${data.owner || sessionId})`, true);
+                } else {
+                    showNotice(`Force release fallito: ${data.error || res.status}`, false);
+                }
+            } catch (err) {
+                showNotice(`Force release fallito: ${err}`, false);
+            }
+        }
+
+        document.getElementById('cleanup-btn').addEventListener('click', async () => {
+            if (!confirm('Eseguire il cleanup delle sessioni zombie?\n\nLe sessioni OnWorking con PID morto o lock tutti stale saranno marcate Stop e i loro lock rilasciati.')) return;
+            try {
+                const res = await fetch('/api/cleanup', {method: 'POST'});
+                const data = await res.json();
+                if (res.ok) {
+                    showNotice(`Cleanup completato: ${data.count} sessioni marcate Stop${data.stopped && data.stopped.length ? ' (' + data.stopped.join(', ') + ')' : ''}.`, true);
+                } else {
+                    showNotice(`Cleanup fallito: ${res.status}`, false);
+                }
+            } catch (err) {
+                showNotice(`Cleanup fallito: ${err}`, false);
+            }
+        });
+
+        // --- Tab ---
+        const tabSessions = document.getElementById('tab-sessions');
+        const tabWiki = document.getElementById('tab-wiki');
+        const viewSessions = document.getElementById('view-sessions');
+        const viewWiki = document.getElementById('view-wiki');
+
+        tabSessions.addEventListener('click', () => {
+            tabSessions.classList.add('active');
+            tabWiki.classList.remove('active');
+            viewSessions.style.display = '';
+            viewWiki.style.display = 'none';
+        });
+        tabWiki.addEventListener('click', () => {
+            tabWiki.classList.add('active');
+            tabSessions.classList.remove('active');
+            viewSessions.style.display = 'none';
+            viewWiki.style.display = '';
+            loadWiki();
+        });
+
+        // --- Filtri (ri-render immediato sul payload già ricevuto) ---
+        dateEl.addEventListener('change', renderSessions);
+        providerEl.addEventListener('change', renderSessions);
+        statusFilterEl.addEventListener('change', renderSessions);
+
+        // --- Wiki ---
+        const wikiContainer = document.getElementById('wiki-container');
+        const wikiQ = document.getElementById('wiki-q');
+
+        function fmtBugs(bugs) {
+            if (!Array.isArray(bugs) || !bugs.length) return '—';
+            return bugs.join('; ');
+        }
+
+        async function loadWiki() {
+            wikiContainer.innerHTML = '<div class="empty">Caricamento in corso...</div>';
+            try {
+                const q = wikiQ.value.trim();
+                const res = await fetch(`/api/wiki?q=${encodeURIComponent(q)}&limit=100`);
+                const data = await res.json();
+                renderWiki(data.entries || []);
+            } catch (err) {
+                wikiContainer.innerHTML = `<div class="empty">Errore: ${escapeHtml(String(err))}</div>`;
+            }
+        }
+
+        function renderWiki(entries) {
+            if (!entries.length) {
+                wikiContainer.innerHTML = '<div class="empty">Nessuna entry wiki trovata.</div>';
+                return;
+            }
+            const rows = entries.map(e => `
+                <tr class="wiki-row" onclick="toggleWikiDetail(${e.id}, this)">
+                    <td>${e.id}</td>
+                    <td>${escapeHtml(e.provider)}</td>
+                    <td>${escapeHtml(e.modello)}</td>
+                    <td>${escapeHtml(e.data)}</td>
+                    <td class="cell-list">${escapeHtml(e.router)}</td>
+                    <td class="cell-list">${escapeHtml(fmtBugs(e.bug_trovati))}</td>
+                    <td>${badge(e.status === 'ok' ? 'Finished' : 'Stop')}</td>
+                </tr>
+            `).join('');
+            wikiContainer.innerHTML = `
+                <table>
+                    <thead>
+                        <tr><th>ID</th><th>Provider</th><th>Modello</th><th>Data</th><th>Router</th><th>Bug trovati</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        async function toggleWikiDetail(entryId, rowEl) {
+            const next = rowEl.nextElementSibling;
+            if (next && next.classList.contains('detail-row')) {
+                next.remove();
+                return;
+            }
+            const detailRow = document.createElement('tr');
+            detailRow.className = 'detail-row';
+            detailRow.innerHTML = '<td colspan="7">Caricamento dettaglio...</td>';
+            rowEl.after(detailRow);
+            try {
+                const res = await fetch(`/api/wiki/${entryId}`);
+                const e = await res.json();
+                if (!res.ok) {
+                    detailRow.innerHTML = `<td colspan="7">Errore: ${escapeHtml(e.error || res.status)}</td>`;
+                    return;
+                }
+                const fmt = (v) => Array.isArray(v) ? (v.length ? v.join('\n') : '—') : (v || '—');
+                detailRow.innerHTML = `
+                    <td colspan="7">
+                        <dl class="detail-grid">
+                            <dt>Session ID</dt><dd>${escapeHtml(e.session_id)}</dd>
+                            <dt>Provider / Modello</dt><dd>${escapeHtml(e.provider)} / ${escapeHtml(e.modello)}</dd>
+                            <dt>Data</dt><dd>${escapeHtml(e.data)}</dd>
+                            <dt>Router</dt><dd>${escapeHtml(e.router)}</dd>
+                            <dt>Cosa fatto</dt><dd>${escapeHtml(e.cosa_fatto)}</dd>
+                            <dt>Come fatto</dt><dd>${escapeHtml(e.come_fatto)}</dd>
+                            <dt>Problema risolto</dt><dd>${escapeHtml(e.problema_risolto)}</dd>
+                            <dt>File toccati</dt><dd>${escapeHtml(fmt(e.file_toccati))}</dd>
+                            <dt>Git push</dt><dd>${escapeHtml(fmt(e.git_push))}</dd>
+                            <dt>Handoff</dt><dd>${escapeHtml(fmt(e.handoff))}</dd>
+                            <dt>Bug trovati</dt><dd>${escapeHtml(fmt(e.bug_trovati))}</dd>
+                            <dt>Skill/Tool/MCP</dt><dd>${escapeHtml(fmt(e.skill_tool_mcp))}</dd>
+                            <dt>Status</dt><dd>${escapeHtml(e.status)}</dd>
+                            <dt>Context file</dt><dd>${escapeHtml(e.context_md || '—')}</dd>
+                        </dl>
+                    </td>
+                `;
+            } catch (err) {
+                detailRow.innerHTML = `<td colspan="7">Errore: ${escapeHtml(String(err))}</td>`;
+            }
+        }
+
+        document.getElementById('wiki-search-btn').addEventListener('click', loadWiki);
+        wikiQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadWiki(); });
+
+        // --- SSE live ---
         function connect() {
             const es = new EventSource('/api/registry/stream');
 

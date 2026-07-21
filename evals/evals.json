@@ -1,0 +1,61 @@
+{
+  "skill_name": "agent-registry",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "register-and-lock-on-start",
+      "prompt": "Ho appena aperto una nuova sessione con Kimi 2.7 su questo progetto. Devo lavorare sul file src/auth.py e iniziare a scrivere i test. Cosa devi fare per registrarti nel registry condiviso e bloccare il file in modo che altri agenti non lo tocchino?",
+      "expected_output": "L'agente legge il registry con `registry_manager.py status`, registra la sessione con `register` (provider/versione/working on, opzionalmente --space e --todo-present), acquisisce il lock su src/auth.py con `lock_manager.py acquire` (che sincronizza automaticamente do_not_touch e space nel registry) e avvia un heartbeat-loop in background. Restituisce i comandi eseguiti.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 2,
+      "eval_name": "refuse-locked-file",
+      "prompt": "Vorrei modificare src/dashboard.py per aggiungere un nuovo componente. Prima però controlla se qualcun altro lo sta già toccando nel registry condiviso. Se è occupato, non devi modificarlo e devi avvisarmi.",
+      "expected_output": "L'agente legge il registry (status/show o registry.md), verifica che src/dashboard.py sia nel campo do_not_touch di un altro agente con status OnWorking (o che risulti locked da `lock_manager.py check`), e rifiuta di modificare il file restituendo un avviso con il nome dell'owner.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 3,
+      "eval_name": "save-handoff-and-register",
+      "prompt": "Ho finito il lavoro su src/auth.py. Salva un handoff per questa sessione e registra il path nel registry condiviso, poi chiudi la sessione.",
+      "expected_output": "L'agente salva un handoff (usando la skill handoff esistente), registra il path con `registry_manager.py handoff`, poi chiude la sessione con `registry_manager.py end` (distillando il wiki entry, status Finished, lock rilasciati automaticamente) oppure con `finish` + rilascio esplicito dei lock.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 4,
+      "eval_name": "batch-preflight-check",
+      "prompt": "Sto per iniziare un refactor che toccherà src/auth.py, src/oauth.py, src/middleware.py e src/dashboard.py. Prima di partire dimmi quali di questi file sono liberi e quali sono bloccati da altri agenti, tutto in un colpo solo.",
+      "expected_output": "L'agente esegue un batch pre-flight check con `lock_manager.py check src/auth.py src/oauth.py src/middleware.py src/dashboard.py --session-id <proprio-id>` e riporta per ogni path lo stato (free / locked con owner e age / locked-by-me / stale), segnalando che i file locked non vanno toccati.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 5,
+      "eval_name": "kill-zombie-agent",
+      "prompt": "Nel registry c'è una sessione claude-1720000000 marcata OnWorking da 3 giorni che blocca src/dashboard.py, ma quel processo non esiste più. Liberami quel file.",
+      "expected_output": "L'agente identifica la sessione zombie (status OnWorking, PID morto o lock stale), esegue `registry_manager.py kill claude-1720000000` (kill reale via PID se verificabile, altrimenti stop logico: status Killed e lock rilasciati) oppure `registry_manager.py cleanup` per marcarla Stop, e verifica che src/dashboard.py risulti di nuovo free con `lock_manager.py check`.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 6,
+      "eval_name": "wiki-query-before-task",
+      "prompt": "Devo sistemare il bug del token OAuth che non viene rinnovato alla scadenza in src/auth.py. Prima di metterci le mani, controlla se qualche agente ci ha già lavorato in passato.",
+      "expected_output": "Dopo essersi registrato, l'agente esegue `registry_manager.py wiki query \"bug rinnovo token OAuth alla scadenza\"`; se il router trova entry pertinenti, legge il dettaglio completo con `registry_manager.py wiki show <id>` (come_fatto, file_toccati, bug_trovati) e lo usa per pianificare il lavoro. Se non c'è nulla, riferisce che il lavoro non risulta svolto in passato.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 7,
+      "eval_name": "end-session-wiki-distill",
+      "prompt": "Ho finito la sessione kimi-1720000001: ho estratto il token manager OAuth da src/auth.py in src/oauth.py, sistemando il bug del refresh, usando le skill agent-registry e handoff. Chiudi la sessione lasciando una traccia completa per gli agenti futuri.",
+      "expected_output": "L'agente esegue un LoopVerifyContext finale (rilegge il context file e verifica che corrisponda a quanto fatto), poi chiude con `registry_manager.py end kimi-1720000001` passando i campi narrativi compilati (--cosa/--come/--risolto/--bug/--skill-tool, opzionalmente --router), così che il wiki entry non abbia campi \"non documentato\". Opzionalmente esegue `registry_manager.py wiki ingest kimi-1720000001` per generare il campo router via LLM. La sessione risulta Finished e i lock rilasciati.",
+      "files": [],
+      "assertions": []
+    }
+  ]
+}

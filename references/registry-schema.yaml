@@ -1,0 +1,87 @@
+# Schema di agent-registry (formato per-sessione)
+#
+# Home di default: ~/.agent-registry/ (override: env AGENT_REGISTRY_HOME).
+#
+# Fonte di verità delle sessioni: sessions/<session_id>.yaml (un file per
+# sessione, un solo owner → niente conflitti di merge tra macchine).
+# registry.md nella home è solo una VISTA rigenerata interamente a ogni
+# scrittura (YAML frontmatter con version/last_updated/agents + tabella
+# markdown): non modificarla a mano.
+#
+# Ruolo residuo di templates/registry-template.md: è la "vista vuota" usata
+# come fallback da registry_manager.parse_registry() quando gli viene passato
+# esplicitamente il path di un registry.md non ancora esistente. Il contenuto
+# coincide con il registry vuoto generato dal codice.
+
+# =============================================================================
+# 1. File sessione: sessions/<session_id>.yaml
+#    (il nome file è il session_id con i caratteri non [A-Za-z0-9_.-]
+#     sostituiti da "_", più estensione .yaml)
+# =============================================================================
+session_id: "kimi-abc123"             # ID univoco della sessione (provider-timestamp o uuid)
+provider: "Kimi"                      # Nome del provider CLI (Kimi, Claude, Gemini, OpenAI, ...)
+ai_version: "2.7"                     # Versione/modello dell'AI (es. Kimi 2.7, Claude Opus 4.8)
+started_at: "2026-07-16 14:50"        # Data/ora avvio in timezone Roma (YYYY-MM-DD HH:MM)
+working_on: "Implementare registry manager"
+todo:
+  past:                               # Task completati in questa sessione
+    - "Setup struttura skill"
+  present:                            # Task in corso
+    - "Scrivere registry_manager.py"
+  future:                             # Task futuri
+    - "Implementare lock manager"
+space:                                # File/aree che l'agente sta toccando (include i path locked)
+  - "scripts/registry_manager.py"
+do_not_touch:                         # File/aree locked (sincronizzato automaticamente dai lock, D5)
+  - "scripts/lock_manager.py"
+status: "OnWorking"                   # OnWorking | Stop | Finished | Killed
+issues: ""                            # Problemi riscontrati (stringa libera; anche note wiki "non documentato")
+handoff: ""                           # Path dell'ultimo handoff salvato
+# --- campi catturati automaticamente alla register ---
+pid: 12345                            # PID del processo alla registrazione (per kill/cleanup)
+cmdline: "kimi --session kimi-abc123" # cmdline del processo (verifica anti-riuso PID, D6)
+project: "QuokoWeb"                   # Nome della directory corrente alla registrazione
+git_branch: "main"                    # Branch git della cwd (vuoto se non è un repo o in caso di errore)
+
+# =============================================================================
+# 2. Wiki entry: wiki/<session_id>.md  (fonte di verità della wiki)
+#    Markdown con frontmatter YAML; il body contiene il context completo
+#    della sessione. Prodotto dal comando `end` (+ `wiki ingest` per il
+#    campo router via LLM).
+# =============================================================================
+# ---
+# id: 3                                # Id progressivo della riga DB
+# session_id: "kimi-abc123"
+# provider: "Kimi"
+# modello: "2.7"                       # ai_version della sessione
+# data: "2026-07-16"                   # Data di avvio (YYYY-MM-DD)
+# router: "..."                        # Descrizione breve ottimizzata per il retrieval
+#                                      # (compilata da --router o da `wiki ingest` via LLM)
+# cosa_fatto: "..."                    # "non documentato" se non compilato
+# come_fatto: "..."                    # idem
+# problema_risolto: "..."              # idem
+# file_toccati: ["scripts/registry_manager.py"]   # da space della sessione
+# git_push: ["a1b2c3d msg commit"]     # commit del repo da started_at in poi (best-effort)
+# handoff: [".handoff-kimi/HANDOFF-007.md"]
+# bug_trovati: ["..."]                 # o ["non documentato"]
+# skill_tool_mcp: ["agent-registry", "handoff"]   # o ["non documentato"]
+# ---
+
+# =============================================================================
+# 3. Indice SQLite: wiki.db (locale, gitignored, ricostruibile con `wiki rebuild`)
+# =============================================================================
+# Tabella wiki_entries (una riga per entry):
+#   id INTEGER PRIMARY KEY
+#   session_id TEXT UNIQUE NOT NULL
+#   provider, modello, data, router, cosa_fatto, come_fatto,
+#   problema_risolto                TEXT DEFAULT ''
+#   file_toccati, git_push, handoff, bug_trovati,
+#   skill_tool_mcp                  TEXT DEFAULT '[]'   (liste serializzate JSON)
+#   status                          TEXT DEFAULT 'ok' ('ok' | 'pending_ingest':
+#                                   pending_ingest se il campo router è vuoto,
+#                                   in attesa di `wiki ingest` / `ingest-pending`)
+#   context_md                      TEXT DEFAULT '' (path relativo del context file)
+#
+# Indice full-text: tabella FTS5 wiki_fts su (router, cosa_fatto, bug_trovati),
+# sincronizzata via trigger su insert/update/delete. Se FTS5 non è disponibile
+# nella build di sqlite3, la ricerca ricade su LIKE (stesso output, più lenta).

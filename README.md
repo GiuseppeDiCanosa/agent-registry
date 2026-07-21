@@ -11,6 +11,35 @@ processi indipendenti.
 npx tessl i spec-driven-development/agent-registry
 ```
 
+## Cosa è cambiato nella 0.3.0
+
+La 0.2.x coordinava gli agenti **nel presente**; la 0.3.0 gli dà anche una
+**memoria** e un modo per seguirli **fra macchine diverse**.
+
+- **Wiki — memoria collettiva delle sessioni.** A fine lavoro
+  `registry_manager.py end <sid>` distilla il context della sessione in un
+  wiki entry (cosa, come, problema risolto, bug, file toccati). Prima di
+  iniziare un lavoro, `wiki query "<domanda>"` risponde se qualcosa di simile
+  è già stato fatto — il router è generato via LangChain/Kimi
+  (`wiki ingest`, `ingest-pending` per il recupero dei pending).
+- **Git-sync multi-macchina.** La home del registry può essere un clone di un
+  repo GitHub **privato**: ogni scrittura schedula un commit+push in
+  background (`sync_manager`), così gli agenti su macchine diverse vedono le
+  sessioni altrui. Best-effort totale: un sync fallito non blocca mai il
+  registry.
+- **Storage per-sessione in `~/.agent-registry/`.** Ogni sessione vive in
+  `sessions/<id>.yaml` (fonte di verità); `registry.md` resta una vista
+  rigenerata. Niente più default su Desktop sincronizzato da iCloud; la home
+  si sposta con `AGENT_REGISTRY_HOME`.
+- **Dashboard operativa** (`scripts/webapp/`, `localhost:8765`): filtri per
+  status/provider/progetto, kill di una sessione (SIGTERM reale con verifica
+  anti-riuso PID, o stop logico cross-macchina) e cleanup degli zombie.
+- **CLI completa, exit code come contratto.** `register`, `update`, `finish`,
+  `end`, `kill`, `cleanup`, `status`, `context log`, `wiki …`: ogni comando
+  esce non-zero se l'operazione fallisce. Batch check su più path in una
+  chiamata (`lock_manager.py check a.py b.py c.py`) e `cleanup` che marca
+  Stop le sessioni zombie rilasciandone i lock residui.
+
 ## Il problema
 
 Fai girare Claude e Kimi sullo stesso repo. Entrambi decidono di rifattorizzare
@@ -22,7 +51,8 @@ ne accorge finché non è tardi.
 ```bash
 # 1. Registrati
 python "$SKILL_DIR/registry_manager.py" register \
-  "kimi-$(date +%s)" "Kimi" "2.7" "Refactoring auth" "src/auth.py" "analisi"
+  "kimi-$(date +%s)" "Kimi" "2.7" "Refactoring auth" \
+  --space "src/auth.py" --todo-present "analisi"
 
 # 2. Acquisisci il lock prima di modificare — l'exit code è il contratto
 if python "$SKILL_DIR/lock_manager.py" acquire "src/auth.py" "$SID"; then
@@ -31,8 +61,10 @@ else
     echo "occupato da un altro agente, non tocco il file"
 fi
 
-# 3. A fine sessione (rilascia anche i lock)
-python "$SKILL_DIR/registry_manager.py" finish "$SID"
+# 3. A fine sessione: distilla in wiki entry e rilascia i lock
+python "$SKILL_DIR/registry_manager.py" end "$SID" \
+  --cosa "refactoring auth" --come "estratto modulo" --risolto "duplicazione"
+# (oppure solo chiusura: registry_manager.py finish "$SID")
 ```
 
 Il registry porta con sé un **blocco di protocollo** che istruisce qualunque
@@ -40,8 +72,9 @@ agente lo apra: gli agenti dei vari provider non condividono alcun sistema di
 skill, quindi le regole viaggiano con lo stato che descrivono, non con la skill
 di un singolo CLI.
 
-C'è anche una dashboard FastAPI (`scripts/webapp/`) per vedere lo stato in
-tempo reale su `localhost:8765`.
+C'è anche una dashboard FastAPI operativa (`scripts/webapp/`) su
+`localhost:8765`: stato in tempo reale, filtri per status/provider/progetto,
+kill delle sessioni e cleanup degli zombie.
 
 ## I lock sono advisory — leggilo prima di fidarti
 
@@ -110,10 +143,12 @@ memoria e mai dal filesystem.
 
 ## Limiti noti
 
-- Il default `~/Desktop/agent-registry/` è mono-macchina e mono-progetto, ed è
-  spesso sincronizzato da iCloud (che può creare copie in conflitto). Usa
-  `AGENT_REGISTRY_PATH` e `AGENT_REGISTRY_LOCK_DIR` per spostarlo su un
-  filesystem locale, fuori dalle cartelle sincronizzate.
+- La home di default è `~/.agent-registry/` (mono-macchina finché non si
+  abilita il git-sync). Usa `AGENT_REGISTRY_HOME` e `AGENT_REGISTRY_LOCK_DIR`
+  per spostarla; tienila su un filesystem locale, fuori dalle cartelle
+  sincronizzate (iCloud e simili possono creare copie in conflitto). Per la
+  condivisione multi-macchina usa il git-sync su repo GitHub privato, non una
+  cartella sincronizzata.
 - Filesystem di rete (NFS) non sono supportati: le garanzie di `flock` lì sono
   deboli o assenti.
 - La granularità del lock è il file, non il simbolo.
