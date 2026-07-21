@@ -584,3 +584,32 @@ def test_setup_git_sync_unknown_visibility_appends_warning(monkeypatch, tmp_home
 
     assert result["status"] == "ok"
     assert "[visibilità non verificata]" in result["message"]
+# --- validazione remote (coverage aggiuntiva) ---
+
+
+def test_validate_remote_malformed_url(tmp_home):
+    """La pre-validazione rifiuta URL sintatticamente invalidi."""
+    result = sm.validate_remote("not a git url")
+    assert result["ok"] is False
+    assert result["error_kind"] == "malformed_url"
+
+
+def test_validate_remote_plausible_url(tmp_home, bare_remote):
+    """La pre-validazione accetta URL validi e ne riporta lo stato vuoto."""
+    result = sm.validate_remote(f"file://{bare_remote}")
+    assert result["ok"] is True
+    assert result["state"] == "empty"
+
+
+def test_init_git_identity_includes_hostname(tmp_home, bare_remote, monkeypatch, tmp_path):
+    """L'identità git del repo include l'hostname della macchina (D7)."""
+    import socket
+
+    # Isola HOME per non ereditare la config git globale della macchina.
+    fake_home = tmp_path / "fake-home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    sm.init_git_sync(f"file://{bare_remote}", tmp_home)
+    email = _git(tmp_home, "config", "user.email").stdout.strip()
+    assert socket.gethostname() in email
