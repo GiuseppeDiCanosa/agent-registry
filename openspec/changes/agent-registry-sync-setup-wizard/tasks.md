@@ -42,8 +42,8 @@
 
 ## 6. Trigger agente in SKILL.md (D6)
 
-- [ ] 6.1 Aggiornare `SKILL.md` (flusso obbligatorio, dopo `status`): proposta setup se `sync enabled: false`, una sola volta per sessione; avvio dashboard in background + `open http://localhost:<porta>`; gestione porta occupata (riuso se è la dashboard del registry, altrimenti porta libera).
-- [ ] 6.2 Mantenere SKILL.md sotto i 5000 token (verifica con stima chars/4).
+- [x] 6.1 Aggiornare `SKILL.md` (flusso obbligatorio, dopo `status`): proposta setup se `sync enabled: false`, una sola volta per sessione; avvio dashboard in background + `open http://localhost:<porta>`; gestione porta occupata (riuso se è la dashboard del registry, altrimenti porta libera).
+- [x] 6.2 Mantenere SKILL.md sotto i 5000 token (verifica con stima chars/4).
 
 ## 7. Chiusura
 

@@ -96,6 +96,28 @@ STATUS, ETÀ) più lo stato del git-sync. Filtri opzionali:
 Identifica quali file/aree sono `do_not_touch` per altri agenti con status
 `OnWorking` (leggendo `registry.md` nella home o con `show`).
 
+### 1b. Configura il multi-macchina (se non è già fatto)
+
+Dopo `status`, se il git-sync risulta `enabled: false`, proponi all'utente di
+configurarlo. Se l'utente accetta:
+
+1. Avvia la dashboard in background:
+   ```bash
+   cd .agents/skills/agent-registry/scripts/webapp
+   uvicorn main:app --host 127.0.0.1 --port 8765 &
+   ```
+2. Se la porta 8765 è occupata, verifica con `GET http://127.0.0.1:8765/api/sync`
+   che sia la dashboard del registry; se sì, riusa quella, altrimenti scegli
+   una porta libera (es. 8766) e rilancia.
+3. Apri il browser:
+   ```bash
+   open http://127.0.0.1:8765
+   ```
+4. Chiedi all'utente di incollare l'URL del remote privato nella setup card.
+
+Se l'utente rifiuta o ignora la proposta, NON riproporla nella stessa sessione
+e prosegui in modalità single-macchina.
+
 ### 2. Registra la sessione
 
 ```bash
