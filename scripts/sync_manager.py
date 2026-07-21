@@ -28,8 +28,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import urllib.error
 import urllib.request
@@ -275,6 +277,206 @@ def _home_has_user_data(home: Path) -> bool:
     except OSError:
         return True  # in dubbio: dati utente presenti
     return False
+
+
+def _remote_default_branch(home: Path) -> str:
+    """Branch di default del remote 'origin' (es. "main"); fallback "main"."""
+    result = _git(home, "symbolic-ref", "--short", "refs/remotes/origin/HEAD", timeout=15)
+    ref = result.stdout.strip()  # es. "origin/main"
+    if ref.startswith("origin/"):
+        return ref[len("origin/"):]
+    branches = _git(home, "branch", "-r", "--format=%(refname:short)", timeout=15).stdout.split()
+    for name in branches:
+        if name.startswith("origin/") and name != "origin/HEAD":
+            return name[len("origin/"):]
+    return "main"
+
+
+def _git_error_message(prefix: str, result: subprocess.CompletedProcess[str]) -> str:
+    """Messaggio di errore per un comando git fallito, classificato se possibile."""
+    output = (result.stderr or result.stdout or "").strip()
+    kind, detail = _classify_lsremote_error(output, result.returncode)
+    if kind != "unknown":
+        return f"{prefix}: {detail}"
+    return f"{prefix}: {output or 'errore sconosciuto'}"
+
+
+def _setup_clone_branch(url: str, home: Path) -> dict[str, Any]:
+    """Ramo (b): remote popolato, home senza `.git` e senza dati utente.
+
+    Clona il remote in una directory temporanea (la home esiste già e non è
+    vuota, quindi il clone diretto non è possibile), sposta il `.git` nella
+    home e allinea il working tree con `reset --hard` (sicuro: il guard sui
+    dati utente è già stato applicato dal chiamante).
+    """
+    tmp = Path(tempfile.mkdtemp(prefix=".agent-registry-clone-", dir=str(home.parent)))
+    try:
+        clone = subprocess.run(
+            ["git", "clone", url, str(tmp)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+        if clone.returncode != 0:
+            return {
+                "status": "error",
+                "branch": "clone",
+                "message": _git_error_message("clone del remote fallito", clone),
+            }
+        shutil.move(str(tmp / ".git"), str(home / ".git"))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    branch = _current_branch(home)
+    reset = _git(home, "reset", "--hard", f"origin/{branch}")
+    if reset.returncode != 0:
+        return {
+            "status": "error",
+            "branch": "clone",
+            "message": _git_error_message("allineamento della home al remote fallito", reset),
+        }
+    _ensure_git_identity(home)
+    return {
+        "status": "ok",
+        "branch": "clone",
+        "message": f"remote clonato nella home (branch {branch}): sessioni, wiki e context remoti disponibili localmente",
+    }
+
+
+def _setup_merge_branch(url: str, home: Path) -> dict[str, Any]:
+    """Ramo (c): remote popolato, home git (o con dati utente senza `.git`).
+
+    Configura il remote, integra con `pull --rebase` (con
+    `--allow-unrelated-histories` se le history non sono correlate) e, su
+    conflitto, risolve rigenerando la vista dai file per-sessione
+    (`_resolve_conflict`). Al termine rigenera la vista e pubblica il merge.
+    """
+    rm = _registry_manager()
+    rm._ensure_structure(home)
+
+    if not (home / ".git").exists():
+        _git(home, "init", check=True)
+        _ensure_gitignore(home)
+        _ensure_git_identity(home)
+        _git(home, "add", "-A", check=True)
+        if _git(home, "diff", "--cached", "--quiet", timeout=30).returncode != 0:
+            _git(home, "commit", "-m", "chore: init dati locali prima del merge", check=True)
+
+    remotes = _git(home, "remote", timeout=15).stdout.split()
+    if "origin" in remotes:
+        _git(home, "remote", "set-url", "origin", url, check=True)
+    else:
+        _git(home, "remote", "add", "origin", url, check=True)
+
+    fetch = _git(home, "fetch", "origin")
+    if fetch.returncode != 0:
+        return {
+            "status": "error",
+            "branch": "merge",
+            "message": _git_error_message("fetch dal remote fallito", fetch),
+        }
+
+    remote_branch = _remote_default_branch(home)
+    merged = False
+    last_output = ""
+    for attempt in range(1, MAX_RETRIES + 1):
+        pull = _git(home, "pull", "--rebase", "origin", remote_branch)
+        output = f"{pull.stdout or ''}\n{pull.stderr or ''}"
+        if pull.returncode != 0 and "unrelated histories" in output.lower():
+            pull = _git(home, "pull", "--rebase", "--allow-unrelated-histories", "origin", remote_branch)
+            output = f"{pull.stdout or ''}\n{pull.stderr or ''}"
+        if pull.returncode == 0:
+            merged = True
+            break
+        last_output = output
+        if "CONFLICT" in output or "could not apply" in output:
+            _resolve_conflict(home)
+            continue
+        _git(home, "rebase", "--abort", timeout=30)
+        return {
+            "status": "error",
+            "branch": "merge",
+            "message": f"integrazione col remote fallita: {output.strip() or 'errore sconosciuto'}",
+        }
+    if not merged:
+        return {
+            "status": "error",
+            "branch": "merge",
+            "message": f"conflitto non risolto dopo {MAX_RETRIES} tentativi: {last_output.strip()}",
+        }
+
+    # Rigenera la vista includendo le sessioni remote appena integrate.
+    try:
+        rm._render_view(home)
+    except Exception:
+        pass  # la vista verrà rigenerata alla prossima scrittura
+    _git(home, "add", "-A")
+    if _git(home, "diff", "--cached", "--quiet", timeout=30).returncode != 0:
+        _git(home, "commit", "-m", "chore: rigenera vista dopo merge col remote")
+
+    push = _git(home, "push", "-u", "origin", f"HEAD:{remote_branch}")
+    if push.returncode != 0:
+        return {
+            "status": "error",
+            "branch": "merge",
+            "message": _git_error_message("merge riuscito localmente ma push fallito", push),
+        }
+    return {
+        "status": "ok",
+        "branch": "merge",
+        "message": f"dati locali integrati col remote (branch {remote_branch}) e vista rigenerata",
+    }
+
+
+def setup_git_sync(
+    url: str,
+    home: Path | None = None,
+    confirm_public: bool = False,
+    confirm_merge: bool = False,
+) -> dict[str, Any]:
+    """Setup guidato del git-sync a tre rami, con pre-validazione del remote.
+
+    La validazione (`git ls-remote`, read-only) precede qualsiasi side-effect
+    sulla home. La strategia dipende dallo stato combinato di home e remote:
+      (a) remote vuoto → init della home, primo commit e push;
+      (b) remote popolato + home senza `.git` e senza dati utente → clone;
+      (c) remote popolato + home git o con dati utente → merge con rebase.
+
+    Ritorna {"status": "ok"|"error", "branch": "init"|"clone"|"merge"|None,
+    "message": str}. `confirm_public`/`confirm_merge` sono accettati per il
+    contratto dell'endpoint dashboard (verifica repo pubblico: vedi
+    `check_github_visibility`).
+    """
+    home = Path(home) if home is not None else _default_home()
+    validation = validate_remote(url)
+    if not validation["ok"]:
+        return {
+            "status": "error",
+            "branch": None,
+            "message": validation["message"],
+            "error_kind": validation.get("error_kind"),
+        }
+
+    if validation["state"] == "empty":
+        init_git_sync(url, home)
+        branch = _current_branch(home)
+        push = _git(home, "push", "-u", "origin", branch)
+        if push.returncode != 0:
+            return {
+                "status": "error",
+                "branch": "init",
+                "message": _git_error_message("primo push verso il remote fallito", push),
+            }
+        return {
+            "status": "ok",
+            "branch": "init",
+            "message": f"home inizializzata come repo git e primo push eseguito (branch {branch})",
+        }
+
+    if not (home / ".git").exists() and not _home_has_user_data(home):
+        return _setup_clone_branch(url, home)
+    return _setup_merge_branch(url, home)
 
 
 def _status_path(home: Path) -> Path:
