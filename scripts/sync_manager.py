@@ -358,7 +358,7 @@ def _setup_clone_branch(url: str, home: Path) -> dict[str, Any]:
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    branch = _current_branch(home)
+    branch = _remote_default_branch(home)
     reset = _git(home, "reset", "--hard", f"origin/{branch}")
     if reset.returncode != 0:
         return {
@@ -481,6 +481,14 @@ def setup_git_sync(
     `check_github_visibility`).
     """
     home = Path(home) if home is not None else _default_home()
+
+    if is_git_enabled(home):
+        return {
+            "status": "ok",
+            "branch": None,
+            "message": "git-sync già configurato in questa home",
+        }
+
     validation = validate_remote(url)
     if not validation["ok"]:
         return {
@@ -491,8 +499,23 @@ def setup_git_sync(
         }
 
     if validation["state"] == "empty":
-        return _setup_init_branch(url, home)
+        result = _setup_init_branch(url, home)
+        if result["status"] == "error":
+            # TOCTOU: nel tempo tra la validazione e il push un'altra macchina
+            # potrebbe aver popolato il remote. Se ora risulta popolato,
+            # ricadiamo sul ramo di integrazione invece di fallire.
+            revalidation = validate_remote(url)
+            if revalidation.get("state") == "populated":
+                return _handle_populated_remote(url, home, confirm_merge)
+        return result
 
+    return _handle_populated_remote(url, home, confirm_merge)
+
+
+def _handle_populated_remote(
+    url: str, home: Path, confirm_merge: bool
+) -> dict[str, Any]:
+    """Dirama clone vs integrazione per un remote popolato."""
     if not (home / ".git").exists() and not _home_has_user_data(home):
         return _setup_clone_branch(url, home)
     if not confirm_merge:

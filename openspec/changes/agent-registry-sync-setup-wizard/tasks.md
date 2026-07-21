@@ -15,12 +15,12 @@
 - [x] 2.3 `init_git_sync` delega a `setup_git_sync` (contratto CLI `init --git-remote` invariato); nel caso integrazione la CLI richiede conferma interattiva (o flag esplicito) prima di procedere.
 - [x] 2.4 Identità git con hostname: `_ensure_git_identity` usa `agent-registry@<socket.gethostname()>` per repo nuovi (D7); repo esistenti non toccati.
 - [x] 2.5 Test ramo (a) con remote bare `file://` vuoto in `tmp_path`: init + push riusciti.
-- [ ] 2.6 Test ramo (b): remote bare popolato + home senza `.git` senza dati utente → clone, sessioni remote presenti nella home; includere caso branch di default diverso da `main`.
-- [ ] 2.7 Test ramo (b)→(c) guard: home con dati utente + remote popolato → integrazione, nessun `reset --hard`, dati locali preservati.
-- [ ] 2.8 Test ramo (c): home git con commit locali + remote popolato (history non correlata) → integrazione riuscita, vista rigenerata, sessioni locali e remote entrambe presenti.
-- [ ] 2.9 Guard "già configurato": `setup_git_sync` su home con sync già attivo → `{status: "ok", branch: None, message: "già configurato"}` senza modifiche; test dedicato.
-- [ ] 2.10 Conferma integrazione obbligatoria: ramo (c) senza `confirm_merge` → `{status: "needs_confirm", reason: "merge_with_local_data"}` senza side-effect; test dedicato (CLI inclusa).
-- [ ] 2.11 Fallback TOCTOU: push iniziale rifiutato perché il remote è stato popolato nel frattempo → ricaduta sul ramo integrazione (con conferma), mai push forzato; test con remote bare popolato dopo la validazione.
+- [x] 2.6 Test ramo (b): remote bare popolato + home senza `.git` senza dati utente → clone, sessioni remote presenti nella home; includere caso branch di default diverso da `main`.
+- [x] 2.7 Test ramo (b)→(c) guard: home con dati utente + remote popolato → integrazione, nessun `reset --hard`, dati locali preservati.
+- [x] 2.8 Test ramo (c): home git con commit locali + remote popolato (history non correlata) → integrazione riuscita, vista rigenerata, sessioni locali e remote entrambe presenti.
+- [x] 2.9 Guard "già configurato": `setup_git_sync` su home con sync già attivo → `{status: "ok", branch: None, message: "già configurato"}` senza modifiche; test dedicato.
+- [x] 2.10 Conferma integrazione obbligatoria: ramo (c) senza `confirm_merge` → `{status: "needs_confirm", reason: "merge_with_local_data"}` senza side-effect; test dedicato (CLI inclusa).
+- [x] 2.11 Fallback TOCTOU: push iniziale rifiutato perché il remote è stato popolato nel frattempo → ricaduta sul ramo integrazione (con conferma), mai push forzato; test con remote bare popolato dopo la validazione.
 
 ## 3. Verifica repo pubblico (D3)
 
