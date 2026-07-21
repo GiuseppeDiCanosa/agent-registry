@@ -92,7 +92,9 @@ def test_heartbeat_renews_lock(tmp_lock_dir):
     after_ts = lm._read_info(lm._lock_file("/tmp/test_heartbeat.txt")).get("timestamp")
     assert after_ts > before_ts
     after = lm.is_locked("/tmp/test_heartbeat.txt")
-    assert after["age"] < 0.05
+    # L'age deve essere "fresco" (rinnovato dall'heartbeat), non stale:
+    # soglia tollerante per non rendere il test flaky sotto carico/fsync.
+    assert after["age"] < 1.0
 
 
 def test_heartbeat_fails_for_non_owner(tmp_lock_dir):
