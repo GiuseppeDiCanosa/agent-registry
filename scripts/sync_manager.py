@@ -29,6 +29,7 @@ import argparse
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -111,11 +112,15 @@ def _ensure_gitignore(home: Path) -> None:
 
 
 def _ensure_git_identity(home: Path) -> None:
-    """Imposta user.name/user.email locali al repo se mancanti (serve per committare)."""
+    """Imposta user.name/user.email locali al repo se mancanti (serve per committare).
+
+    L'email include l'hostname (D7) per distinguere le macchine nella history;
+    i repo già inizializzati (config presente) non vengono toccati.
+    """
     if not _git(home, "config", "user.name", timeout=15).stdout.strip():
         _git(home, "config", "user.name", "agent-registry", timeout=15)
     if not _git(home, "config", "user.email", timeout=15).stdout.strip():
-        _git(home, "config", "user.email", "agent-registry@localhost", timeout=15)
+        _git(home, "config", "user.email", f"agent-registry@{socket.gethostname()}", timeout=15)
 
 
 def init_git_sync(remote_url: str, home: Path | None = None, confirm_merge: bool = False) -> Path:
