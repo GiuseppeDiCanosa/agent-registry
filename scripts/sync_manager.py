@@ -344,8 +344,8 @@ def _setup_clone_branch(url: str, home: Path) -> dict[str, Any]:
     }
 
 
-def _setup_merge_branch(url: str, home: Path) -> dict[str, Any]:
-    """Ramo (c): remote popolato, home git (o con dati utente senza `.git`).
+def _setup_integrazione_branch(url: str, home: Path) -> dict[str, Any]:
+    """Ramo (c) integrazione: remote popolato, home git (o con dati utente senza `.git`).
 
     Configura il remote, integra con `pull --rebase` (con
     `--allow-unrelated-histories` se le history non sono correlate) e, su
@@ -373,7 +373,7 @@ def _setup_merge_branch(url: str, home: Path) -> dict[str, Any]:
     if fetch.returncode != 0:
         return {
             "status": "error",
-            "branch": "merge",
+            "branch": "integrazione",
             "message": _git_error_message("fetch dal remote fallito", fetch),
         }
 
@@ -396,13 +396,13 @@ def _setup_merge_branch(url: str, home: Path) -> dict[str, Any]:
         _git(home, "rebase", "--abort", timeout=30)
         return {
             "status": "error",
-            "branch": "merge",
+            "branch": "integrazione",
             "message": f"integrazione col remote fallita: {output.strip() or 'errore sconosciuto'}",
         }
     if not merged:
         return {
             "status": "error",
-            "branch": "merge",
+            "branch": "integrazione",
             "message": f"conflitto non risolto dopo {MAX_RETRIES} tentativi: {last_output.strip()}",
         }
 
@@ -419,12 +419,12 @@ def _setup_merge_branch(url: str, home: Path) -> dict[str, Any]:
     if push.returncode != 0:
         return {
             "status": "error",
-            "branch": "merge",
+            "branch": "integrazione",
             "message": _git_error_message("merge riuscito localmente ma push fallito", push),
         }
     return {
         "status": "ok",
-        "branch": "merge",
+        "branch": "integrazione",
         "message": f"dati locali integrati col remote (branch {remote_branch}) e vista rigenerata",
     }
 
@@ -441,9 +441,9 @@ def setup_git_sync(
     sulla home. La strategia dipende dallo stato combinato di home e remote:
       (a) remote vuoto → init della home, primo commit e push;
       (b) remote popolato + home senza `.git` e senza dati utente → clone;
-      (c) remote popolato + home git o con dati utente → merge con rebase.
+      (c) remote popolato + home git o con dati utente → integrazione con rebase.
 
-    Ritorna {"status": "ok"|"error", "branch": "init"|"clone"|"merge"|None,
+    Ritorna {"status": "ok"|"error", "branch": "init"|"clone"|"integrazione"|None,
     "message": str}. `confirm_public`/`confirm_merge` sono accettati per il
     contratto dell'endpoint dashboard (verifica repo pubblico: vedi
     `check_github_visibility`).
@@ -476,7 +476,7 @@ def setup_git_sync(
 
     if not (home / ".git").exists() and not _home_has_user_data(home):
         return _setup_clone_branch(url, home)
-    return _setup_merge_branch(url, home)
+    return _setup_integrazione_branch(url, home)
 
 
 def _status_path(home: Path) -> Path:
