@@ -269,6 +269,26 @@ def test_cli_status(tmp_home, capsys):
     assert status["enabled"] is False
 
 
+# --- setup_git_sync: ramo (a) init con remote vuoto ---
+
+
+def test_setup_init_branch_empty_remote(tmp_home, bare_remote):
+    """Ramo (a): remote bare `file://` vuoto → init + primo push riusciti."""
+    result = sm.setup_git_sync(f"file://{bare_remote}", home=tmp_home)
+
+    assert result["status"] == "ok"
+    assert result["branch"] == "init"
+    assert (tmp_home / ".git").is_dir()
+    assert sm.is_git_enabled(tmp_home) is True
+
+    # push riuscito: il remote contiene il primo commit con registry.md
+    branch = _git(tmp_home, "symbolic-ref", "--short", "HEAD").stdout.strip()
+    refs = _git(bare_remote, "show-ref").stdout
+    assert f"refs/heads/{branch}" in refs
+    tracked = _git(bare_remote, "ls-tree", "-r", "--name-only", branch).stdout
+    assert "registry.md" in tracked
+
+
 # --- _classify_lsremote_error (stderr realistici) ---
 
 # stderr osservati da git reale (Linux/macOS, locale inglese).
