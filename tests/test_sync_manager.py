@@ -501,3 +501,86 @@ def test_setup_init_toctou_fallback_to_integration(monkeypatch, tmp_home, tmp_pa
     assert result["status"] == "ok"
     assert result["branch"] == "integrazione"
     assert (tmp_home / "sessions" / "remote-session.yaml").exists()
+# --- GitHub visibility (D3) ---
+
+
+def _fake_urlopen_response(payload: bytes):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return payload
+
+    return FakeResponse()
+
+
+def test_check_github_visibility_public(monkeypatch):
+    """3.1/3.3: repo pubblico su GitHub."""
+    monkeypatch.setattr(
+        sm.urllib.request,
+        "urlopen",
+        lambda req, timeout=None: _fake_urlopen_response(b'{"private": false}'),
+    )
+    assert sm.check_github_visibility("https://github.com/owner/repo.git", token="tok") == "public"
+
+
+def test_check_github_visibility_private_ssh(monkeypatch):
+    """3.1/3.3: repo privato su GitHub, URL SSH scp-like."""
+    monkeypatch.setattr(
+        sm.urllib.request,
+        "urlopen",
+        lambda req, timeout=None: _fake_urlopen_response(b'{"private": true}'),
+    )
+    assert sm.check_github_visibility("git@github.com:owner/repo.git", token="tok") == "private"
+
+
+def test_check_github_visibility_unknown_without_token():
+    """3.1/3.3: senza token la visibilità è unknown."""
+    assert sm.check_github_visibility("https://github.com/owner/repo") == "unknown"
+
+
+def test_check_github_visibility_unknown_non_github():
+    """3.1/3.3: host non GitHub → unknown anche con token."""
+    assert sm.check_github_visibility("https://gitlab.com/owner/repo", token="tok") == "unknown"
+
+
+def test_setup_git_sync_public_repo_needs_confirm(monkeypatch, tmp_home, bare_remote):
+    """3.2: repo GitHub pubblico senza conferma → needs_confirm."""
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(sm, "check_github_visibility", lambda url, token=None: "public")
+    monkeypatch.setattr(sm, "_is_github_host", lambda url: True)
+
+    result = sm.setup_git_sync(f"file://{bare_remote}", home=tmp_home)
+
+    assert result["status"] == "needs_confirm"
+    assert result["reason"] == "public_repo"
+    assert not (tmp_home / ".git").exists()  # nessun side-effect
+
+
+def test_setup_git_sync_public_repo_confirmed(monkeypatch, tmp_home, bare_remote):
+    """3.2: repo GitHub pubblico con conferma → setup normale."""
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(sm, "check_github_visibility", lambda url, token=None: "public")
+    monkeypatch.setattr(sm, "_is_github_host", lambda url: True)
+
+    result = sm.setup_git_sync(f"file://{bare_remote}", home=tmp_home, confirm_public=True)
+
+    assert result["status"] == "ok"
+    assert result["branch"] == "init"
+    assert sm.is_git_enabled(tmp_home) is True
+
+
+def test_setup_git_sync_unknown_visibility_appends_warning(monkeypatch, tmp_home, bare_remote):
+    """3.2: visibilità non verificabile su GitHub → warning nel messaggio, setup ok."""
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(sm, "check_github_visibility", lambda url, token=None: "unknown")
+    monkeypatch.setattr(sm, "_is_github_host", lambda url: True)
+
+    result = sm.setup_git_sync(f"file://{bare_remote}", home=tmp_home)
+
+    assert result["status"] == "ok"
+    assert "[visibilità non verificata]" in result["message"]

@@ -24,9 +24,9 @@
 
 ## 3. Verifica repo pubblico (D3)
 
-- [ ] 3.1 Funzione `check_github_visibility(url, token) -> "private"|"public"|"unknown"` via GitHub API (urllib stdlib), solo per host github.com e solo se token presente.
-- [ ] 3.2 Integrazione in `setup_git_sync`: `public` senza `confirm_public` → `{status: "needs_confirm", reason: "public_repo"}` senza side-effect; con conferma → procede.
-- [ ] 3.3 Test con chiamata HTTP mockata (callable iniettata o monkeypatch urllib): public/private/unknown.
+- [x] 3.1 Funzione `check_github_visibility(url, token) -> "private"|"public"|"unknown"` via GitHub API (urllib stdlib), solo per host github.com e solo se token presente.
+- [x] 3.2 Integrazione in `setup_git_sync`: `public` senza `confirm_public` → `{status: "needs_confirm", reason: "public_repo"}` senza side-effect; con conferma → procede.
+- [x] 3.3 Test con chiamata HTTP mockata (callable iniettata o monkeypatch urllib): public/private/unknown.
 
 ## 4. Endpoint dashboard (D4)
 

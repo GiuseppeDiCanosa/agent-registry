@@ -35,6 +35,7 @@ import sys
 import tempfile
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -134,6 +135,58 @@ def init_git_sync(remote_url: str, home: Path | None = None, confirm_merge: bool
     if result["status"] != "ok":
         raise RuntimeError(result["message"])
     return Path(home) if home is not None else _default_home()
+
+
+def check_github_visibility(url: str, token: str | None = None) -> str:
+    """Verifica la visibilità di un repo GitHub (public/private/unknown).
+
+    Ritorna "unknown" se l'host non è github.com, manca il token, l'URL non
+    ha il formato owner/repo, o l'API risponde con errore. Usa solo stdlib.
+    """
+    if token is None:
+        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if not token:
+        return "unknown"
+
+    url = (url or "").strip()
+    # SSH scp-like: git@github.com:owner/repo.git
+    if url.startswith("git@github.com:"):
+        path = url.split(":", 1)[1]
+    else:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.hostname not in ("github.com", "www.github.com"):
+            return "unknown"
+        path = parsed.path.lstrip("/")
+
+    path = path.removesuffix(".git")
+    parts = path.split("/")
+    if len(parts) < 2 or not parts[0] or not parts[1]:
+        return "unknown"
+    owner, repo = parts[0], parts[1]
+
+    api_url = f"https://api.github.com/repos/{owner}/{repo}"
+    request = urllib.request.Request(
+        api_url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "agent-registry-sync",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            if data.get("private") is False:
+                return "public"
+            if data.get("private") is True:
+                return "private"
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return "unknown"
+    except Exception:
+        pass
+    return "unknown"
 
 
 # Pattern per la classificazione degli errori di `git ls-remote` (stderr).
@@ -498,6 +551,10 @@ def setup_git_sync(
             "error_kind": validation.get("error_kind"),
         }
 
+    public_confirm = _github_visibility_check(url, confirm_public)
+    if public_confirm is not None:
+        return public_confirm
+
     if validation["state"] == "empty":
         result = _setup_init_branch(url, home)
         if result["status"] == "error":
@@ -506,10 +563,54 @@ def setup_git_sync(
             # ricadiamo sul ramo di integrazione invece di fallire.
             revalidation = validate_remote(url)
             if revalidation.get("state") == "populated":
-                return _handle_populated_remote(url, home, confirm_merge)
-        return result
+                result = _handle_populated_remote(url, home, confirm_merge)
+        return _append_visibility_warning(result, url)
 
-    return _handle_populated_remote(url, home, confirm_merge)
+    result = _handle_populated_remote(url, home, confirm_merge)
+    return _append_visibility_warning(result, url)
+
+
+def _github_visibility_check(url: str, confirm_public: bool) -> dict[str, Any] | None:
+    """Ritorta un dict needs_confirm per repo pubblico, altrimenti None.
+
+    Per host non GitHub o visibilità non verificabile ritorna None senza
+    side-effect (il warning unknown viene aggiunto in seguito).
+    """
+    if not _is_github_host(url):
+        return None
+    visibility = check_github_visibility(url)
+    if visibility == "public" and not confirm_public:
+        return {
+            "status": "needs_confirm",
+            "reason": "public_repo",
+            "branch": None,
+            "message": (
+                "il remote è un repository GitHub pubblico: contiene contesto "
+                "di lavoro potenzialmente sensibile. Conferma con confirm_public "
+                "per procedere"
+            ),
+        }
+    return None
+
+
+def _append_visibility_warning(result: dict[str, Any], url: str) -> dict[str, Any]:
+    """Appende l'avviso 'visibilità non verificata' ai risultati ok su GitHub."""
+    if (
+        result.get("status") == "ok"
+        and _is_github_host(url)
+        and check_github_visibility(url) == "unknown"
+    ):
+        result["message"] = result.get("message", "") + " [visibilità non verificata]"
+    return result
+
+
+def _is_github_host(url: str) -> bool:
+    """True se l'URL punta a github.com (https o ssh scp-like)."""
+    u = (url or "").strip()
+    if u.startswith("git@github.com:"):
+        return True
+    parsed = urllib.parse.urlparse(u)
+    return parsed.hostname in ("github.com", "www.github.com")
 
 
 def _handle_populated_remote(
