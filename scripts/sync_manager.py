@@ -201,6 +201,58 @@ def _classify_lsremote_error(stderr: str, returncode: int) -> tuple[str, str]:
     return kind, detail
 
 
+def _is_plausible_git_url(url: str) -> bool:
+    """Verifica sintattica minima: scp-like (`user@host:path`) o `scheme://...`."""
+    if not url or any(c.isspace() for c in url):
+        return False
+    if "://" in url:
+        scheme, rest = url.split("://", 1)
+        return bool(scheme) and bool(rest.strip("/"))
+    return ":" in url and bool(url.split(":", 1)[0])
+
+
+def validate_remote(url: str) -> dict[str, Any]:
+    """Pre-valida il remote con `git ls-remote` (read-only, nessun side-effect).
+
+    Ritorna un dict:
+      {"ok": True, "state": "empty" | "populated"}
+      {"ok": False, "error_kind": kind, "message": dettaglio}
+    kind proviene da `_classify_lsremote_error`; timeout e git assente sono
+    classificati rispettivamente come "unreachable" e "unknown".
+    """
+    url = (url or "").strip()
+    if not _is_plausible_git_url(url):
+        return {
+            "ok": False,
+            "error_kind": "malformed_url",
+            "message": "URL del remote malformato (atteso scp-like user@host:path o scheme://...)",
+        }
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", url],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "ok": False,
+            "error_kind": "unreachable",
+            "message": "remote non raggiungibile: timeout di 30s su git ls-remote",
+        }
+    except OSError as exc:
+        return {
+            "ok": False,
+            "error_kind": "unknown",
+            "message": f"impossibile eseguire git ls-remote: {exc}",
+        }
+    if result.returncode == 0:
+        return {"ok": True, "state": "populated" if result.stdout.strip() else "empty"}
+    kind, detail = _classify_lsremote_error(result.stderr or result.stdout or "", result.returncode)
+    return {"ok": False, "error_kind": kind, "message": detail}
+
+
 def _status_path(home: Path) -> Path:
     return home / SYNC_STATUS_FILE
 
