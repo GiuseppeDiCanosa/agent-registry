@@ -254,6 +254,29 @@ def validate_remote(url: str) -> dict[str, Any]:
     return {"ok": False, "error_kind": kind, "message": detail}
 
 
+def _home_has_user_data(home: Path) -> bool:
+    """True se la home contiene dati utente: `sessions/*.yaml`, `wiki/*.md`
+    o `contexts/*` con contenuto.
+
+    Guard conservativo per la scelta del ramo di setup: in caso di errore di
+    lettura si assume che ci siano dati utente (mai cancellazione silenziosa).
+    """
+    home = Path(home)
+    try:
+        for pattern in ("sessions/*.yaml", "wiki/*.md"):
+            for path in home.glob(pattern):
+                if path.is_file() and path.stat().st_size > 0:
+                    return True
+        contexts_dir = home / "contexts"
+        if contexts_dir.is_dir():
+            for path in contexts_dir.rglob("*"):
+                if path.is_file() and path.stat().st_size > 0:
+                    return True
+    except OSError:
+        return True  # in dubbio: dati utente presenti
+    return False
+
+
 def _status_path(home: Path) -> Path:
     return home / SYNC_STATUS_FILE
 
