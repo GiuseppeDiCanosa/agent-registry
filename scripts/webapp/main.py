@@ -283,6 +283,35 @@ async def post_force_release(body: ForceReleaseRequest) -> JSONResponse:
     )
 
 
+class SyncInitRequest(BaseModel):
+    """Body di POST /api/sync/init: configurazione del git-sync multi-macchina."""
+
+    url: str
+    confirm_public: bool = False
+    confirm_merge: bool = False
+
+
+@app.post("/api/sync/init")
+async def post_sync_init(body: SyncInitRequest) -> JSONResponse:
+    """Configura il git-sync della home con validazione e setup a tre rami.
+
+    Risposte:
+      - 200 ok: setup completato (branch init/clone/integrazione);
+      - 200 needs_confirm: richiesta conferma (repo pubblico o integrazione dati locali);
+      - 400 error: URL malformato, auth fallita, remote non raggiungibile, ecc.;
+      - 200 already_configured: il sync è già attivo sulla home (no-op).
+    """
+    result = sync_manager.setup_git_sync(
+        body.url,
+        confirm_public=body.confirm_public,
+        confirm_merge=body.confirm_merge,
+    )
+    status_code = 200
+    if result.get("status") == "error":
+        status_code = 400
+    return JSONResponse(status_code=status_code, content=result)
+
+
 @app.post("/api/cleanup")
 async def post_cleanup() -> dict:
     """Cleanup delle sessioni zombie: marca Stop e rilascia i lock residui."""

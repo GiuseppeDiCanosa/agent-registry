@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts" / "webapp"))
 
 import lock_manager as lm
 import registry_manager as rm
+import sync_manager as sm
 import wiki_manager as wm
 import main as webapp_main
 
@@ -35,6 +36,16 @@ def home(tmp_path, monkeypatch):
     # Reset override modulo lock_manager (altri test lo impostano)
     monkeypatch.setattr(lm, "LOCK_DIR", None)
     return h
+
+
+@pytest.fixture
+def bare_remote(tmp_path):
+    """Remote bare locale per i test di setup sync."""
+    remote = tmp_path / "remote.git"
+    import subprocess
+
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+    return remote
 
 
 @pytest.fixture
@@ -345,3 +356,78 @@ def test_sync_endpoint(client):
     res = client.get("/api/sync")
     assert res.status_code == 200
     assert res.json()["enabled"] is False
+# --- sync setup endpoint ---
+
+
+def test_sync_init_ok_empty_remote(client, home, bare_remote):
+    """4.1/4.3: setup su remote vuoto → init ok."""
+    res = client.post("/api/sync/init", json={"url": f"file://{bare_remote}"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ok"
+    assert data["branch"] == "init"
+    assert sm.is_git_enabled(home) is True
+
+
+def test_sync_init_error_malformed_url(client, home):
+    """4.1/4.3: URL malformato → 400, nessun side-effect."""
+    res = client.post("/api/sync/init", json={"url": "not-a-git-url"})
+    assert res.status_code == 400
+    data = res.json()
+    assert data["status"] == "error"
+    assert not (home / ".git").exists()
+
+
+def test_sync_init_needs_confirm_public(client, home, bare_remote, monkeypatch):
+    """4.1/4.3: repo pubblico senza conferma → needs_confirm, no side-effect."""
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(sm, "check_github_visibility", lambda url, token=None: "public")
+    monkeypatch.setattr(sm, "_is_github_host", lambda url: True)
+
+    res = client.post("/api/sync/init", json={"url": f"file://{bare_remote}"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "needs_confirm"
+    assert data["reason"] == "public_repo"
+    assert not (home / ".git").exists()
+
+
+def test_sync_init_already_configured(client, home, bare_remote):
+    """4.1/4.3: setup su home già configurata → ok no-op."""
+    sm.init_git_sync(f"file://{bare_remote}", home)
+    res = client.post("/api/sync/init", json={"url": f"file://{bare_remote}"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ok"
+    assert data["branch"] is None
+    assert "già configurato" in data["message"]
+
+
+def test_sync_init_needs_confirm_merge(client, home, tmp_path):
+    """4.1/4.3: remote popolato + home git locale → needs_confirm merge."""
+    # crea remote popolato
+    remote = tmp_path / "remote.git"
+    import subprocess
+
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+    work = tmp_path / "work"
+    work.mkdir()
+    subprocess.run(["git", "-C", str(work), "init"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.email", "t@e"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.name", "T"], check=True, capture_output=True)
+    (work / "sessions").mkdir()
+    (work / "sessions" / "r.yaml").write_text("id: r\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-m", "i"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "push", str(remote), "main"], check=True, capture_output=True)
+
+    # home git locale
+    home.mkdir(parents=True)
+    subprocess.run(["git", "-C", str(home), "init"], check=True, capture_output=True)
+
+    res = client.post("/api/sync/init", json={"url": f"file://{remote}"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "needs_confirm"
+    assert data["reason"] == "merge_with_local_data"
+    assert data["branch"] == "integrazione"

@@ -30,9 +30,9 @@
 
 ## 4. Endpoint dashboard (D4)
 
-- [ ] 4.1 `POST /api/sync/init` in `scripts/webapp/main.py`: body `{url, confirm_public?, confirm_merge?}`, risposta `{status, branch?, message, detail?}`; nessuno side-effect su `needs_confirm`/`error`.
-- [ ] 4.2 `GET /api/sync` già espone `enabled`: verificare che basti alla UI (altrimenti estendere).
-- [ ] 4.3 Test endpoint con TestClient: ok (ramo init con remote bare), error auth, needs_confirm public, idempotenza chiamata ripetuta con conferma.
+- [x] 4.1 `POST /api/sync/init` in `scripts/webapp/main.py`: body `{url, confirm_public?, confirm_merge?}`, risposta `{status, branch?, message, detail?}`; nessuno side-effect su `needs_confirm`/`error`.
+- [x] 4.2 `GET /api/sync` già espone `enabled`: verificare che basti alla UI (altrimenti estendere).
+- [x] 4.3 Test endpoint con TestClient: ok (ramo init con remote bare), error auth, needs_confirm public, idempotenza chiamata ripetuta con conferma.
 
 ## 5. Setup card UI (D5)
 
