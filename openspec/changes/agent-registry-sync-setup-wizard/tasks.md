@@ -11,13 +11,16 @@
 ## 2. Setup a tre rami (D2, D7)
 
 - [x] 2.1 Funzione `_home_has_user_data(home)` — True se esistono `sessions/*.yaml`, `wiki/*.md` o `contexts/*` con contenuto.
-- [x] 2.2 Funzione `setup_git_sync(url, home=None, confirm_public=False, confirm_merge=False) -> dict` con i tre rami: (a) init+push (logica esistente), (b) clone in tmp + spostamento `.git` (solo se `_home_has_user_data` è False, altrimenti ramo c), (c) add remote + fetch + `pull --rebase` con `--allow-unrelated-histories` se serve + `_resolve_conflict` esistente. Ritorna `{status, branch, message}`.
-- [ ] 2.3 `init_git_sync` delega a `setup_git_sync` (contratto CLI `init --git-remote` invariato).
-- [ ] 2.4 Identità git con hostname: `_ensure_git_identity` usa `agent-registry@<socket.gethostname()>` per repo nuovi (D7).
+- [ ] 2.2 Funzione `setup_git_sync(url, home=None, confirm_public=False, confirm_merge=False) -> dict` con i tre rami: (a) `init`+push (logica esistente), (b) `clone` in tmp + spostamento `.git` (solo se `_home_has_user_data` è False, altrimenti ramo c), (c) `integrazione`: add remote + fetch + `pull --rebase` sul branch di default del remote, con `--allow-unrelated-histories` se serve + `_resolve_conflict` esistente. Rami (b) e (c) operano sul branch di default del remote (non hardcoded `main`). Ritorna `{status, branch: "init"|"clone"|"integrazione", message}`.
+- [ ] 2.3 `init_git_sync` delega a `setup_git_sync` (contratto CLI `init --git-remote` invariato); nel caso integrazione la CLI richiede conferma interattiva (o flag esplicito) prima di procedere.
+- [ ] 2.4 Identità git con hostname: `_ensure_git_identity` usa `agent-registry@<socket.gethostname()>` per repo nuovi (D7); repo esistenti non toccati.
 - [ ] 2.5 Test ramo (a) con remote bare `file://` vuoto in `tmp_path`: init + push riusciti.
-- [ ] 2.6 Test ramo (b): remote bare popolato + home senza `.git` senza dati utente → clone, sessioni remote presenti nella home.
+- [ ] 2.6 Test ramo (b): remote bare popolato + home senza `.git` senza dati utente → clone, sessioni remote presenti nella home; includere caso branch di default diverso da `main`.
 - [ ] 2.7 Test ramo (b)→(c) guard: home con dati utente + remote popolato → integrazione, nessun `reset --hard`, dati locali preservati.
-- [ ] 2.8 Test ramo (c): home git con commit locali + remote popolato (history non correlata) → merge riuscito, vista rigenerata, sessioni locali e remote entrambe presenti.
+- [ ] 2.8 Test ramo (c): home git con commit locali + remote popolato (history non correlata) → integrazione riuscita, vista rigenerata, sessioni locali e remote entrambe presenti.
+- [ ] 2.9 Guard "già configurato": `setup_git_sync` su home con sync già attivo → `{status: "ok", branch: None, message: "già configurato"}` senza modifiche; test dedicato.
+- [ ] 2.10 Conferma integrazione obbligatoria: ramo (c) senza `confirm_merge` → `{status: "needs_confirm", reason: "merge_with_local_data"}` senza side-effect; test dedicato (CLI inclusa).
+- [ ] 2.11 Fallback TOCTOU: push iniziale rifiutato perché il remote è stato popolato nel frattempo → ricaduta sul ramo integrazione (con conferma), mai push forzato; test con remote bare popolato dopo la validazione.
 
 ## 3. Verifica repo pubblico (D3)
 
