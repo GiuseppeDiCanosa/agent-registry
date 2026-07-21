@@ -1,0 +1,55 @@
+# Tasks: agent-registry-sync-setup-wizard
+
+> Lavoro nel repo standalone `~/Agent-Registry/repo`; al termine sincronizzare la copia in `.agents/skills/agent-registry/`. Test: `python3 -m pytest tests/ -q` dalla root del repo standalone.
+
+## 1. Pre-validazione remote (D1)
+
+- [ ] 1.1 In `scripts/sync_manager.py`: funzione `_classify_lsremote_error(stderr, returncode)` pura che classifica in `malformed_url | auth_failed | unreachable | unknown` (pattern multipli su stderr, fallback unknown con stderr allegato).
+- [ ] 1.2 Funzione `validate_remote(url) -> dict` (`{ok, state: "empty"|"populated", error_kind?, message?}`) che esegue `git ls-remote` con `GIT_TERMINAL_PROMPT=0` e timeout 30s, usando `_classify_lsremote_error`.
+- [ ] 1.3 Test unitari di `_classify_lsremote_error` su stderr realistici (SSH denied, HTTPS auth, host irrisolvibile, timeout, URL malformato).
+
+## 2. Setup a tre rami (D2, D7)
+
+- [ ] 2.1 Funzione `_home_has_user_data(home)` — True se esistono `sessions/*.yaml`, `wiki/*.md` o `contexts/*` con contenuto.
+- [ ] 2.2 Funzione `setup_git_sync(url, home=None, confirm_public=False, confirm_merge=False) -> dict` con i tre rami: (a) init+push (logica esistente), (b) clone in tmp + spostamento `.git` (solo se `_home_has_user_data` è False, altrimenti ramo c), (c) add remote + fetch + `pull --rebase` con `--allow-unrelated-histories` se serve + `_resolve_conflict` esistente. Ritorna `{status, branch, message}`.
+- [ ] 2.3 `init_git_sync` delega a `setup_git_sync` (contratto CLI `init --git-remote` invariato).
+- [ ] 2.4 Identità git con hostname: `_ensure_git_identity` usa `agent-registry@<socket.gethostname()>` per repo nuovi (D7).
+- [ ] 2.5 Test ramo (a) con remote bare `file://` vuoto in `tmp_path`: init + push riusciti.
+- [ ] 2.6 Test ramo (b): remote bare popolato + home senza `.git` senza dati utente → clone, sessioni remote presenti nella home.
+- [ ] 2.7 Test ramo (b)→(c) guard: home con dati utente + remote popolato → integrazione, nessun `reset --hard`, dati locali preservati.
+- [ ] 2.8 Test ramo (c): home git con commit locali + remote popolato (history non correlata) → merge riuscito, vista rigenerata, sessioni locali e remote entrambe presenti.
+
+## 3. Verifica repo pubblico (D3)
+
+- [ ] 3.1 Funzione `check_github_visibility(url, token) -> "private"|"public"|"unknown"` via GitHub API (urllib stdlib), solo per host github.com e solo se token presente.
+- [ ] 3.2 Integrazione in `setup_git_sync`: `public` senza `confirm_public` → `{status: "needs_confirm", reason: "public_repo"}` senza side-effect; con conferma → procede.
+- [ ] 3.3 Test con chiamata HTTP mockata (callable iniettata o monkeypatch urllib): public/private/unknown.
+
+## 4. Endpoint dashboard (D4)
+
+- [ ] 4.1 `POST /api/sync/init` in `scripts/webapp/main.py`: body `{url, confirm_public?, confirm_merge?}`, risposta `{status, branch?, message, detail?}`; nessuno side-effect su `needs_confirm`/`error`.
+- [ ] 4.2 `GET /api/sync` già espone `enabled`: verificare che basti alla UI (altrimenti estendere).
+- [ ] 4.3 Test endpoint con TestClient: ok (ramo init con remote bare), error auth, needs_confirm public, idempotenza chiamata ripetuta con conferma.
+
+## 5. Setup card UI (D5)
+
+- [ ] 5.1 In `static/index.html`: setup card in cima visibile quando `GET /api/sync` → `enabled: false` (campo URL, bottone "Configura multi-macchina", area messaggi esito/errore, checkbox conferma per repo pubblico quando richiesta).
+- [ ] 5.2 Al successo: card nascosta, stato sync normale visibile; aggiornamento via refresh stato esistente (SSE/polling).
+- [ ] 5.3 Verifica manuale in browser: card presente senza sync, setup riuscito end-to-end con remote bare locale, card assente dopo.
+
+## 6. Trigger agente in SKILL.md (D6)
+
+- [ ] 6.1 Aggiornare `SKILL.md` (flusso obbligatorio, dopo `status`): proposta setup se `sync enabled: false`, una sola volta per sessione; avvio dashboard in background + `open http://localhost:<porta>`; gestione porta occupata (riuso se è la dashboard del registry, altrimenti porta libera).
+- [ ] 6.2 Mantenere SKILL.md sotto i 5000 token (verifica con stima chars/4).
+
+## 7. Chiusura
+
+- [ ] 7.1 Suite completa verde nel repo standalone (`python3 -m pytest tests/ -q`).
+
+## Passi manuali post-loop (fuori dal loop, eseguiti dall'operatore)
+
+1. Sincronizzare la copia in `.agents/skills/agent-registry/` (SKILL.md + scripts + webapp + tests).
+2. Suite verde anche dalla copia QuokoWeb.
+3. Commit repo standalone (release 0.3.1) e push su GitHub.
+4. Pubblicazione tessl `agent-registry@0.3.1`.
+5. Commit in QuokoWeb: skill sincronizzata + artifacts openspec del change.
