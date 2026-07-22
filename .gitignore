@@ -5,6 +5,7 @@ __pycache__/
 
 # Segreti e dati locali — mai committare
 .env
+docker-compose.override.yml
 notifier/messages.local.json
 wiki.db
 sync-status.json
