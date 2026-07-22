@@ -18,7 +18,7 @@ per nome, persistenza su volume, notifiche WhatsApp sugli eventi degli agenti.
 Cinque servizi (`docker-compose.yml`): **db** (persistenza `/data` + git-sync),
 **dashboard** (webapp :8765, sempre accesa), **code** (sandbox runtime per gli
 agenti), **wa-gateway** (WhatsApp via [open-wa](https://github.com/rmyndharis/OpenWA)),
-**watchdog** (notifica `executed` / `stopped` / `idle >1h`).
+**watchdog** (notifica `started` / `executed` / `stopped` / `idle >1h`).
 
 ```bash
 cp .env.example .env      # compila WA_RECIPIENT, WA_NAME, chiavi… (mai committare .env)
@@ -35,12 +35,38 @@ docker compose up -d wa-gateway watchdog
 # apri il gateway e scansiona il QR con WhatsApp del telefono
 ```
 
+Il servizio **db** sincronizza la home verso il remote git via **SSH**: l'immagine
+include `openssh-client` e il container monta in sola lettura la chiave e la config git
+dell'operatore (`~/.ssh`, `~/.gitconfig`), così l'auth avviene senza segreti dentro
+l'immagine (usa quindi un remote `git@github.com:…`, non HTTPS).
+
 I segreti (numero, API key, credenziali git) stanno solo in `.env` (gitignored).
 Il pool pubblico dei messaggi è `notifier/messages.default.json` (templato,
 neutro); un pool personale può essere messo in `notifier/messages.local.json`
 (gitignored), che ha la precedenza. La home `/data` è un volume isolato: per
 condividere il registry con gli agenti dell'host, sostituisci il named volume con
 un bind-mount `~/.agent-registry:/data` in `docker-compose.yml`.
+
+## Cosa è cambiato nella 0.5.0
+
+La 0.5.0 porta il registry **fuori dal singolo terminale**: un ambiente containerizzato
+riproducibile e le notifiche degli agenti su WhatsApp.
+
+- **Sandbox Docker (OrbStack).** Cinque servizi orchestrati via `docker-compose.yml`
+  (`db`, `dashboard`, `code`, `wa-gateway`, `watchdog`): dashboard sempre accesa e
+  raggiungibile per nome, persistenza su volume, un'unica immagine autosufficiente
+  (Python 3.13 + `git` + `openssh-client` + dipendenze).
+- **Notifiche WhatsApp sugli eventi degli agenti.** Il `watchdog` osserva lo stato e
+  notifica quattro eventi — **`started`** (una sessione entra in `OnWorking`, inclusa la
+  prima comparsa), `executed` (→ `Finished`), `stopped` (→ `Stop`/`Killed`), `idle`
+  (`OnWorking` fermo oltre soglia). Ogni evento è emesso una sola volta, con avvio a
+  freddo che semina lo stato senza notifiche storiche. Messaggi da pool templato
+  (`notifier/messages.default.json`), con pool personale `messages.local.json`
+  (gitignored) prioritario. Invio via gateway [open-wa](https://github.com/rmyndharis/OpenWA),
+  nessun numero/API key nel codice.
+- **Git-sync multi-macchina via SSH.** Il servizio `db` sincronizza la home verso il
+  remote in loop, autenticandosi via chiave SSH montata in sola lettura — nessuna
+  credenziale incorporata nell'immagine.
 
 ## Cosa è cambiato nella 0.3.0
 

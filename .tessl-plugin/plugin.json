@@ -1,6 +1,6 @@
 {
   "name": "spec-driven-development/agent-registry",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Coordina multipli agenti AI CLI (Kimi, Claude, Gemini, OpenAI, ecc.) che lavorano contemporaneamente sullo stesso progetto e mantiene una memoria collettiva (wiki) di tutte le sessioni passate. Usa questa skill SEMPRE quando lavori in parallelo con altre AI CLI, quando devi salvare lo stato di una sessione condivisa, quando vuoi evitare sovrascritture su file toccati da altri agenti, quando devi chiedere \"questo lavoro è già stato fatto? questo bug si è già visto?\", o quando l'utente parla di \"multi-tap\", \"registry agenti\", \"coordination\", \"lock file\", \"handoff condiviso\", \"wiki delle sessioni\", \"chi sta lavorando su cosa\" o \"evitare che le AI si pestino i piedi\".",
   "private": false,
   "license": "MIT",
