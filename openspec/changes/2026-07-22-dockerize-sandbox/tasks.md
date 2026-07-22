@@ -25,7 +25,7 @@
 - [ ] 5.1 `docker compose build` (immagine agent-registry:local)
 - [ ] 5.2 `docker compose up -d db dashboard code` → aprire `dashboard.agent-registry.orb.local`
 - [ ] 5.3 `wa-gateway`: finalizzare immagine reale OpenWA, `docker compose up wa-gateway`, **scan QR**
-- [ ] 5.4 Confermare payload send-text reale di open-wa (`to`/`text`) e correggere `wa_client` se serve
+- [x] 5.4 Payload send-text open-wa confermato dalle docs (`chatId`@c.us + `text`, header X-API-Key); wa_client aggiornato. Resta la validazione col gateway reale.
 - [ ] 5.5 Simulare i 3 eventi e verificare l'arrivo del messaggio su WhatsApp
 
 ## 6. Chiusura

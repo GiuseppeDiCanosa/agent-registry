@@ -37,8 +37,10 @@ def build_send_request(
     url = f"{base_url.rstrip('/')}/api/sessions/{session_id}/messages/send-text"
     headers = {"Content-Type": "application/json"}
     if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    body = {"to": recipient, "text": text}
+        headers["X-API-Key"] = api_key
+    # open-wa vuole il chatId nel formato WhatsApp: <numero>@c.us
+    chat_id = recipient if "@" in recipient else f"{recipient}@c.us"
+    body = {"chatId": chat_id, "text": text}
     return url, headers, body
 
 

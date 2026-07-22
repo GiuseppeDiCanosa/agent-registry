@@ -74,11 +74,11 @@ services:
 
   wa-gateway:
     # Gateway WhatsApp open-wa (https://github.com/rmyndharis/OpenWA).
-    # Immagine configurabile: da finalizzare con le istruzioni docker del repo OpenWA.
+    # Immagine GHCR ufficiale multi-arch (amd64/arm64). L'API key si genera nella
+    # dashboard del gateway dopo lo scan QR, poi va messa in .env come WA_API_KEY.
     image: ${WA_GATEWAY_IMAGE:-ghcr.io/rmyndharis/openwa:latest}
-    environment:
-      OPENWA_API_KEY: ${WA_API_KEY:-}
     volumes:
+      # Persistenza sessione WhatsApp (path interno da confermare con le docs OpenWA).
       - wa-session:/app/sessions
     ports:
       - "2785:2785"

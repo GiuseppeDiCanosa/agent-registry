@@ -72,9 +72,9 @@ def test_send_request_from_config_no_hardcoded_secrets():
         "ciao", "39333", base_url="http://gw:2785", session_id="s1", api_key="secret"
     )
     assert url == "http://gw:2785/api/sessions/s1/messages/send-text"
-    assert body["to"] == "39333"
+    assert body["chatId"] == "39333@c.us"
     assert body["text"] == "ciao"
-    assert headers["Authorization"] == "Bearer secret"
+    assert headers["X-API-Key"] == "secret"
     # nessun numero/chiave hardcoded nel modulo
     src = (ROOT / "notifier" / "wa_client.py").read_text(encoding="utf-8")
     import re

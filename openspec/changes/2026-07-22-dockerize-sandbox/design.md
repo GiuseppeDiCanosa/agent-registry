@@ -35,7 +35,9 @@ robusto (niente `str.format`, tollera graffe rogue).
 
 ## Rischi
 - `fcntl` regge solo su volume locale condiviso (no NFS).
-- Il payload/endpoint esatto di open-wa (`to`/`text`) va confermato con le docs reali del
-  repo OpenWA al primo test col gateway.
+- Payload open-wa confermato dalle docs: `POST /api/sessions/{id}/messages/send-text` con
+  body `{"chatId": "<numero>@c.us", "text": "..."}` e header `X-API-Key`; immagine
+  `ghcr.io/rmyndharis/openwa:latest` (multi-arch), porta 2785. Resta da validare col gateway
+  reale al primo invio (path interno del volume sessione ancora da confermare).
 - `last_activity` da mtime è un proxy: se un heartbeat aggiorna solo il lock e non il file
   sessione, l'idle potrebbe scattare prima; da rifinire dopo verifica reale.
