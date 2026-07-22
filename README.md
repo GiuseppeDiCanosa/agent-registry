@@ -11,6 +11,37 @@ processi indipendenti.
 npx tessl i spec-driven-development/agent-registry
 ```
 
+## Sandbox Docker (OrbStack)
+
+Ambiente containerizzato riproducibile: dashboard sempre accesa e raggiungibile
+per nome, persistenza su volume, notifiche WhatsApp sugli eventi degli agenti.
+Cinque servizi (`docker-compose.yml`): **db** (persistenza `/data` + git-sync),
+**dashboard** (webapp :8765, sempre accesa), **code** (sandbox runtime per gli
+agenti), **wa-gateway** (WhatsApp via [open-wa](https://github.com/rmyndharis/OpenWA)),
+**watchdog** (notifica `executed` / `stopped` / `idle >1h`).
+
+```bash
+cp .env.example .env      # compila WA_RECIPIENT, WA_NAME, chiavi… (mai committare .env)
+docker compose build
+docker compose up -d db dashboard code   # sandbox base
+open http://dashboard.agent-registry.orb.local   # o http://localhost:8765
+```
+
+Per le notifiche WhatsApp, avvia il gateway e collega l'account **scansionando il
+QR** una volta (necessario, richiede il telefono):
+
+```bash
+docker compose up -d wa-gateway watchdog
+# apri il gateway e scansiona il QR con WhatsApp del telefono
+```
+
+I segreti (numero, API key, credenziali git) stanno solo in `.env` (gitignored).
+Il pool pubblico dei messaggi è `notifier/messages.default.json` (templato,
+neutro); un pool personale può essere messo in `notifier/messages.local.json`
+(gitignored), che ha la precedenza. La home `/data` è un volume isolato: per
+condividere il registry con gli agenti dell'host, sostituisci il named volume con
+un bind-mount `~/.agent-registry:/data` in `docker-compose.yml`.
+
 ## Cosa è cambiato nella 0.3.0
 
 La 0.2.x coordinava gli agenti **nel presente**; la 0.3.0 gli dà anche una
