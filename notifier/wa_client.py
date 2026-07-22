@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
 import urllib.request
 from typing import Any
 
@@ -60,5 +61,10 @@ def send_text(
     req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), method="POST")
     for k, v in headers.items():
         req.add_header(k, v)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (host interno)
-        return resp.status, resp.read().decode("utf-8", "replace")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (host interno)
+            return resp.status, resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        # Superficie il corpo dell'errore: senza, un 400 del gateway è indecifrabile.
+        detail = exc.read().decode("utf-8", "replace")
+        raise RuntimeError(f"HTTP {exc.code}: {detail}") from None

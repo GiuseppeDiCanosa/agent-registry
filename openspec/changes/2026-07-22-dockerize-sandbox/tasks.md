@@ -21,12 +21,12 @@
 - [x] 4.2 `.env.example` + `.gitignore` aggiornato (.env, messages.local.json, wiki.db, ...)
 - [x] 4.3 Suite completa verde (209 passed)
 
-## 5. Verifica reale (OrbStack) — DA FARE al risveglio
-- [ ] 5.1 `docker compose build` (immagine agent-registry:local)
-- [ ] 5.2 `docker compose up -d db dashboard code` → aprire `dashboard.agent-registry.orb.local`
-- [ ] 5.3 `wa-gateway`: finalizzare immagine reale OpenWA, `docker compose up wa-gateway`, **scan QR**
-- [x] 5.4 Payload send-text open-wa confermato dalle docs (`chatId`@c.us + `text`, header X-API-Key); wa_client aggiornato. Resta la validazione col gateway reale.
-- [ ] 5.5 Simulare i 3 eventi e verificare l'arrivo del messaggio su WhatsApp
+## 5. Verifica reale (OrbStack)
+- [x] 5.1 `docker compose build` (immagine agent-registry:local) — OK
+- [x] 5.2 `docker compose up -d db dashboard code` → dashboard vede sessioni dal volume — OK
+- [x] 5.3 `wa-gateway`: immagine `ghcr.io/rmyndharis/openwa:latest`, QR scansionato, sessione `ready` — OK
+- [x] 5.4 Payload send-text confermato (`chatId`@c.us + `text`, header X-API-Key). **Nota: sessionId nel path = UUID, non il nome.**
+- [x] 5.5 Evento `executed` → messaggio WhatsApp **consegnato** ✅ (stopped/idle stessa strada). wa_client logga il corpo errore.
 
 ## 6. Chiusura
 - [ ] 6.1 `verify.sh` (spec-verify) verde
