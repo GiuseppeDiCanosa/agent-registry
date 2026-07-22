@@ -1,0 +1,116 @@
+# GENERATED FROM SPEC — DO NOT EDIT DIRECTLY
+# Source: openspec/specs/container-deployment/spec.md
+#
+# Sandbox agent-registry su OrbStack. Cinque servizi:
+#   db         -> persistenza (/data) + git-sync
+#   dashboard  -> webapp sempre accesa (8765)
+#   code       -> sandbox runtime per gli agenti (register/acquire/end/wiki)
+#   wa-gateway -> gateway WhatsApp open-wa (immagine esterna, sessione via QR)
+#   watchdog   -> poller che notifica gli eventi via WhatsApp
+# I segreti arrivano da .env (gitignored): vedi .env.example.
+name: agent-registry
+
+services:
+  db:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: agent-registry:local
+    command: ["bash", "docker/sync-loop.sh"]
+    environment:
+      AGENT_REGISTRY_HOME: /data
+      PYTHONUNBUFFERED: "1"
+      AGENT_REGISTRY_GIT_REMOTE: ${AGENT_REGISTRY_GIT_REMOTE:-}
+      SYNC_INTERVAL: ${SYNC_INTERVAL:-60}
+    volumes:
+      - agent-registry-data:/data
+      - ${HOME}/.gitconfig:/root/.gitconfig:ro
+      - ${HOME}/.ssh:/root/.ssh:ro
+    restart: unless-stopped
+    labels:
+      dev.orbstack.domains: db.agent-registry.orb.local
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: agent-registry:local
+    command: ["sh", "-c", "cd scripts/webapp && uvicorn main:app --host 0.0.0.0 --port 8765"]
+    environment:
+      AGENT_REGISTRY_HOME: /data
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - agent-registry-data:/data
+    ports:
+      - "8765:8765"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8765/api/sync"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    labels:
+      dev.orbstack.domains: dashboard.agent-registry.orb.local
+    depends_on:
+      - db
+
+  code:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: agent-registry:local
+    command: ["sleep", "infinity"]
+    environment:
+      AGENT_REGISTRY_HOME: /data
+      PYTHONUNBUFFERED: "1"
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+    volumes:
+      - agent-registry-data:/data
+    restart: unless-stopped
+    labels:
+      dev.orbstack.domains: code.agent-registry.orb.local
+    depends_on:
+      - db
+
+  wa-gateway:
+    # Gateway WhatsApp open-wa (https://github.com/rmyndharis/OpenWA).
+    # Immagine configurabile: da finalizzare con le istruzioni docker del repo OpenWA.
+    image: ${WA_GATEWAY_IMAGE:-ghcr.io/rmyndharis/openwa:latest}
+    environment:
+      OPENWA_API_KEY: ${WA_API_KEY:-}
+    volumes:
+      - wa-session:/app/sessions
+    ports:
+      - "2785:2785"
+    restart: unless-stopped
+    labels:
+      dev.orbstack.domains: wa.agent-registry.orb.local
+
+  watchdog:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: agent-registry:local
+    command: ["python3", "notifier/watchdog.py"]
+    environment:
+      AGENT_REGISTRY_HOME: /data
+      PYTHONUNBUFFERED: "1"
+      WA_GATEWAY_URL: ${WA_GATEWAY_URL:-http://wa-gateway:2785}
+      WA_SESSION_ID: ${WA_SESSION_ID:-default}
+      WA_API_KEY: ${WA_API_KEY:-}
+      WA_RECIPIENT: ${WA_RECIPIENT:-}
+      WA_NAME: ${WA_NAME:-}
+      IDLE_THRESHOLD: ${IDLE_THRESHOLD:-3600}
+      WATCHDOG_INTERVAL: ${WATCHDOG_INTERVAL:-60}
+    volumes:
+      - agent-registry-data:/data
+    restart: unless-stopped
+    labels:
+      dev.orbstack.domains: watchdog.agent-registry.orb.local
+    depends_on:
+      - db
+      - wa-gateway
+
+volumes:
+  agent-registry-data:
+  wa-session:

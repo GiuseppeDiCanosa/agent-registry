@@ -1,0 +1,26 @@
+{
+  "executed": [
+    "Ehi {name}, {provider} ha completato la sessione {session_id}. Dai un'occhiata!",
+    "{name}, lavoro finito: la sessione {session_id} è a posto.",
+    "Fatto! {provider} ha chiuso {working_on}. Tocca a te, {name}.",
+    "Buone notizie {name}: {session_id} ha finito senza intoppi.",
+    "{name}, un agente ha portato a termine il compito. Controlla il risultato.",
+    "Completato: {provider} ha finito {working_on}."
+  ],
+  "stopped": [
+    "Attenzione {name}: la sessione {session_id} si è fermata.",
+    "{name}, {provider} si è bloccato su {working_on}. Meglio dare un'occhiata.",
+    "Stop: la sessione {session_id} non sta più lavorando.",
+    "{name}, un agente si è arrestato. Serve il tuo intervento.",
+    "La sessione {session_id} ({provider}) si è interrotta.",
+    "Heads up {name}: {working_on} è in stato di stop."
+  ],
+  "idle": [
+    "{name}, la sessione {session_id} è ferma da {minutes} minuti.",
+    "Inattività: {provider} non dà segni di vita da {minutes} minuti.",
+    "{name}, {session_id} è idle da {minutes} minuti. Tutto ok?",
+    "Da {minutes} minuti nessun progresso su {working_on}.",
+    "{name}, controlla {session_id}: ferma da {minutes} minuti.",
+    "Silenzio da {minutes} minuti sulla sessione {session_id}."
+  ]
+}

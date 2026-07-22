@@ -60,6 +60,52 @@
       }
     }
   },
+  "openspec/specs/container-deployment/spec.md": {
+    "targets": [
+      "docker/Dockerfile",
+      "docker-compose.yml",
+      "docker/sync-loop.sh",
+      ".dockerignore"
+    ],
+    "requirements": {
+      "servizi-che-condividono-la-home-del-registry": {
+        "name": "Servizi che condividono la home del registry",
+        "tests": [
+          "tests/docker/test_compose.py"
+        ]
+      },
+      "dashboard-sempre-disponibile": {
+        "name": "Dashboard sempre disponibile",
+        "tests": [
+          "tests/docker/test_compose.py"
+        ]
+      },
+      "dominio-orbstack-per-ogni-servizio": {
+        "name": "Dominio OrbStack per ogni servizio",
+        "tests": [
+          "tests/docker/test_compose.py"
+        ]
+      },
+      "immagine-unica-autosufficiente": {
+        "name": "Immagine unica autosufficiente",
+        "tests": [
+          "tests/docker/test_compose.py"
+        ]
+      },
+      "nessun-segreto-nell-immagine-o-nel-repository": {
+        "name": "Nessun segreto nell'immagine o nel repository",
+        "tests": [
+          "tests/docker/test_compose.py"
+        ]
+      },
+      "il-servizio-db-esegue-il-git-sync": {
+        "name": "Il servizio db esegue il git-sync",
+        "tests": [
+          "tests/docker/test_compose.py"
+        ]
+      }
+    }
+  },
   "openspec/specs/file-locking/spec.md": {
     "targets": [
       "scripts/lock_manager.py"
@@ -111,6 +157,32 @@
         "name": "Interfaccia a riga di comando con exit code significativi",
         "tests": [
           "tests/test_lock_cli.py"
+        ]
+      }
+    }
+  },
+  "openspec/specs/whatsapp-notifications/spec.md": {
+    "targets": [
+      "notifier/watchdog.py",
+      "notifier/wa_client.py"
+    ],
+    "requirements": {
+      "rilevamento-dei-tre-eventi-di-notifica": {
+        "name": "Rilevamento dei tre eventi di notifica",
+        "tests": [
+          "tests/notifier/test_watchdog.py"
+        ]
+      },
+      "messaggi-da-pool-con-placeholder": {
+        "name": "Messaggi da pool con placeholder",
+        "tests": [
+          "tests/notifier/test_watchdog.py"
+        ]
+      },
+      "invio-via-gateway-esterno-senza-segreti-hardcoded": {
+        "name": "Invio via gateway esterno senza segreti hardcoded",
+        "tests": [
+          "tests/notifier/test_watchdog.py"
         ]
       }
     }

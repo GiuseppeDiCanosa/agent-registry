@@ -2,3 +2,11 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+
+# Segreti e dati locali — mai committare
+.env
+notifier/messages.local.json
+wiki.db
+sync-status.json
+locks/
+.DS_Store

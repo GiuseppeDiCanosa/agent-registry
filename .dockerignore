@@ -1,0 +1,19 @@
+# GENERATED FROM SPEC — DO NOT EDIT DIRECTLY
+# Source: openspec/specs/container-deployment/spec.md
+.git
+.gitignore
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.env
+notifier/messages.local.json
+wiki.db
+sync-status.json
+locks/
+.handoff/
+openspec/changes/
+tests/
+evals/
+*.md
