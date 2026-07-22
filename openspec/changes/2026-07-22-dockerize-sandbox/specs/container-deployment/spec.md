@@ -30,6 +30,18 @@ la variabile deprecata `AGENT_REGISTRY_PATH`.
 - **AND** ciascuno monta il medesimo volume su `/data` e ha `AGENT_REGISTRY_HOME=/data`
 - **AND** nessun servizio definisce `AGENT_REGISTRY_PATH`
 
+### Requirement: Home dati configurabile
+La sorgente del volume `/data` SHALL essere configurabile tramite la variabile
+`AGENT_REGISTRY_DATA_SOURCE`, con **default** un volume Docker isolato
+(`agent-registry-data`). Impostandola a un percorso host, la sandbox opera sulla home reale,
+così ogni agente che scrive in quella home viene osservato dal watchdog.
+
+**Verified by**: [@test] tests/docker/test_compose.py
+
+#### Scenario: sorgente /data parametrizzata con default isolato
+- **WHEN** si ispeziona il mount `/data` dei servizi `db`, `dashboard`, `code`, `watchdog`
+- **THEN** la sorgente usa `AGENT_REGISTRY_DATA_SOURCE` con default `agent-registry-data`
+
 ### Requirement: Dashboard sempre disponibile
 Il servizio `dashboard` SHALL avviare la webapp su `0.0.0.0:8765`, avere `restart:
 unless-stopped` e un healthcheck HTTP verso l'endpoint di stato.

@@ -23,7 +23,7 @@ services:
       AGENT_REGISTRY_GIT_REMOTE: ${AGENT_REGISTRY_GIT_REMOTE:-}
       SYNC_INTERVAL: ${SYNC_INTERVAL:-60}
     volumes:
-      - agent-registry-data:/data
+      - ${AGENT_REGISTRY_DATA_SOURCE:-agent-registry-data}:/data
       - ${HOME}/.gitconfig:/root/.gitconfig:ro
       - ${HOME}/.ssh:/root/.ssh:ro
     restart: unless-stopped
@@ -40,7 +40,7 @@ services:
       AGENT_REGISTRY_HOME: /data
       PYTHONUNBUFFERED: "1"
     volumes:
-      - agent-registry-data:/data
+      - ${AGENT_REGISTRY_DATA_SOURCE:-agent-registry-data}:/data
     ports:
       - "8765:8765"
     restart: unless-stopped
@@ -65,7 +65,7 @@ services:
       PYTHONUNBUFFERED: "1"
       KIMI_API_KEY: ${KIMI_API_KEY:-}
     volumes:
-      - agent-registry-data:/data
+      - ${AGENT_REGISTRY_DATA_SOURCE:-agent-registry-data}:/data
     restart: unless-stopped
     labels:
       dev.orbstack.domains: code.agent-registry.orb.local
@@ -103,7 +103,7 @@ services:
       IDLE_THRESHOLD: ${IDLE_THRESHOLD:-3600}
       WATCHDOG_INTERVAL: ${WATCHDOG_INTERVAL:-60}
     volumes:
-      - agent-registry-data:/data
+      - ${AGENT_REGISTRY_DATA_SOURCE:-agent-registry-data}:/data
     restart: unless-stopped
     labels:
       dev.orbstack.domains: watchdog.agent-registry.orb.local

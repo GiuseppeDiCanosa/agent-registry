@@ -33,6 +33,15 @@ def test_services_share_data_home():
         assert "AGENT_REGISTRY_PATH" not in _env(svc), f"{name} usa la variabile deprecata"
 
 
+def test_data_source_parameterized_default_isolated():
+    services = _compose()["services"]
+    for name in PY_SERVICES:
+        mounts = [str(m) for m in services[name].get("volumes", [])]
+        data_mount = next(m for m in mounts if m.endswith(":/data"))
+        assert "AGENT_REGISTRY_DATA_SOURCE" in data_mount, name
+        assert "agent-registry-data" in data_mount, name  # default isolato
+
+
 def test_no_deprecated_path_anywhere():
     raw = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "AGENT_REGISTRY_PATH" not in raw
