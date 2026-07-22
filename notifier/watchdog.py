@@ -1,7 +1,8 @@
 # GENERATED FROM SPEC — DO NOT EDIT DIRECTLY
 # Source: openspec/specs/whatsapp-notifications/spec.md
-"""Watchdog: osserva lo stato del registry e notifica via WhatsApp tre eventi.
+"""Watchdog: osserva lo stato del registry e notifica via WhatsApp quattro eventi.
 
+- started:  una sessione passa a OnWorking (inclusa la prima comparsa nel registry)
 - executed: una sessione passa a Finished
 - stopped:  una sessione passa a Stop o Killed
 - idle:     una sessione OnWorking senza attività da oltre la soglia (default 3600s)
@@ -58,6 +59,8 @@ def classify_events(
             events.append(("executed", s))
         elif status in STOPPED_STATES and before not in STOPPED_STATES:
             events.append(("stopped", s))
+        elif status == "OnWorking" and before != "OnWorking":
+            events.append(("started", s))
 
         if status == "OnWorking":
             last = s.get("last_activity") or 0

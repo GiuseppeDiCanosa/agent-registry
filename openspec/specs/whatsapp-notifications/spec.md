@@ -8,21 +8,28 @@ targets:
 
 ## Purpose
 Notificare l'operatore via WhatsApp quando lo stato degli agenti nel registry cambia in modi
-rilevanti: un agente ha completato il lavoro, un agente si è fermato, o un agente è rimasto
-inattivo troppo a lungo. I messaggi provengono da un pool configurabile e sono scelti a caso
+rilevanti: un agente ha avviato una sessione di lavoro, un agente ha completato il lavoro, un
+agente si è fermato, o un agente è rimasto inattivo troppo a lungo. I messaggi provengono da un
+pool configurabile e sono scelti a caso
 per varietà. L'integrazione WhatsApp avviene tramite un gateway HTTP esterno (open-wa) e non
 richiede modifiche agli script del registry: il watchdog osserva soltanto lo stato in
 `AGENT_REGISTRY_HOME`.
 
 ## Requirements
 
-### Requirement: Rilevamento dei tre eventi di notifica
-Il watchdog SHALL classificare le sessioni in tre eventi — `executed` (una sessione passa a
-`Finished`), `stopped` (una sessione passa a `Stop` o `Killed`), `idle` (una sessione
-`OnWorking` senza attività da oltre una soglia configurabile, default 3600s) — usando lo stato
-precedente per emettere ogni evento **una sola volta** per transizione.
+### Requirement: Rilevamento dei quattro eventi di notifica
+Il watchdog SHALL classificare le sessioni in quattro eventi — `started` (una sessione passa a
+`OnWorking` da uno stato precedente diverso, inclusa la prima comparsa nel registry), `executed`
+(una sessione passa a `Finished`), `stopped` (una sessione passa a `Stop` o `Killed`), `idle`
+(una sessione `OnWorking` senza attività da oltre una soglia configurabile, default 3600s) —
+usando lo stato precedente per emettere ogni evento **una sola volta** per transizione.
 
 **Verified by**: [@test] tests/notifier/test_watchdog.py
+
+#### Scenario: avvio sessione rilevato una sola volta
+- **WHEN** una sessione compare nel registry con status `OnWorking` (o vi transita da uno stato diverso) fra due cicli
+- **THEN** viene emesso un evento `started` per quella sessione
+- **AND** al ciclo successivo, se lo stato resta `OnWorking`, non viene emesso di nuovo
 
 #### Scenario: completamento rilevato una sola volta
 - **WHEN** una sessione passa da `OnWorking` a `Finished` fra due cicli

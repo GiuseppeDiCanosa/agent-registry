@@ -16,11 +16,37 @@ def _state():
     return {"status": {}, "idle_alerted": {}}
 
 
+def test_started_emitted_once():
+    prev = _state()
+    s = [{"session_id": "a", "status": "OnWorking", "last_activity": 1000}]
+    events, prev = watchdog.classify_events(s, prev, now=1000, idle_threshold=3600)
+    assert [e[0] for e in events] == ["started"]
+    # secondo giro, resta OnWorking -> niente
+    events, prev = watchdog.classify_events(s, prev, now=1001, idle_threshold=3600)
+    assert events == []
+
+
+def test_started_not_emitted_on_cold_start():
+    s = [{"session_id": "a", "status": "OnWorking", "last_activity": 1000}]
+    events, state = watchdog.classify_events(
+        s, _state(), now=1000, idle_threshold=3600, cold_start=True
+    )
+    assert events == []
+    assert state["status"]["a"] == "OnWorking"
+    # dopo il cold-start, un nuovo cambiamento genera regolarmente il suo evento
+    s2 = [
+        {"session_id": "a", "status": "OnWorking", "last_activity": 1000},
+        {"session_id": "b", "status": "OnWorking", "last_activity": 1000},
+    ]
+    events2, _ = watchdog.classify_events(s2, state, now=1001, idle_threshold=3600)
+    assert [e[0] for e in events2] == ["started"]  # solo b
+
+
 def test_executed_emitted_once():
     prev = _state()
     s = [{"session_id": "a", "status": "OnWorking", "last_activity": 1000}]
     events, prev = watchdog.classify_events(s, prev, now=1000, idle_threshold=3600)
-    assert events == []
+    assert [e[0] for e in events] == ["started"]  # prima comparsa OnWorking
     s = [{"session_id": "a", "status": "Finished", "last_activity": 1000}]
     events, prev = watchdog.classify_events(s, prev, now=1000, idle_threshold=3600)
     assert [e[0] for e in events] == ["executed"]
@@ -43,7 +69,7 @@ def test_idle_emitted_once():
     # OnWorking, ultima attività 2 ore fa (now=10000, last=2800 -> 7200s > 3600)
     s = [{"session_id": "a", "status": "OnWorking", "last_activity": 2800}]
     events, prev = watchdog.classify_events(s, prev, now=10000, idle_threshold=3600)
-    assert [e[0] for e in events] == ["idle"]
+    assert [e[0] for e in events] == ["started", "idle"]  # prima comparsa + idle
     # ancora idle -> soppresso
     events, prev = watchdog.classify_events(s, prev, now=10100, idle_threshold=3600)
     assert events == []

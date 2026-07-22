@@ -1,4 +1,12 @@
 {
+  "started": [
+    "Ehi {name}, {provider} ha avviato la sessione {session_id}.",
+    "{name}, si parte: un agente ha iniziato a lavorare su {working_on}.",
+    "Al via! La sessione {session_id} ({provider}) è ora al lavoro.",
+    "{name}, nuova sessione operativa: {session_id} è partita.",
+    "Un agente ha preso in carico {working_on}. Ti tengo aggiornato, {name}.",
+    "Avviata la sessione {session_id}: {provider} è entrato in azione."
+  ],
   "executed": [
     "Ehi {name}, {provider} ha completato la sessione {session_id}. Dai un'occhiata!",
     "{name}, lavoro finito: la sessione {session_id} è a posto.",
