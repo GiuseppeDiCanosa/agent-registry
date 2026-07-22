@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
     AGENT_REGISTRY_HOME=/data
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git curl ca-certificates bash \
+ && apt-get install -y --no-install-recommends git openssh-client curl ca-certificates bash \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

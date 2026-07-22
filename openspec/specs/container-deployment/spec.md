@@ -66,9 +66,10 @@ Ogni servizio SHALL dichiarare il label `dev.orbstack.domains` con un dominio st
 - **AND** il valore contiene il nome del servizio come sottodominio di `agent-registry.orb.local`
 
 ### Requirement: Immagine unica autosufficiente
-Il `Dockerfile` SHALL produrre un'unica immagine basata su Python 3.13 che contiene `git`,
-gli script della skill e tutte le dipendenze (webapp + wiki-ingest), usata dai servizi
-`db`, `dashboard`, `code` e `watchdog` con comandi diversi.
+Il `Dockerfile` SHALL produrre un'unica immagine basata su Python 3.13 che contiene `git`, il
+client SSH (`openssh-client`) per il git-sync verso remote SSH, gli script della skill e tutte
+le dipendenze (webapp + wiki-ingest), usata dai servizi `db`, `dashboard`, `code` e `watchdog`
+con comandi diversi.
 
 **Verified by**: [@test] tests/docker/test_compose.py
 
@@ -77,6 +78,11 @@ gli script della skill e tutte le dipendenze (webapp + wiki-ingest), usata dai s
 - **THEN** `db`, `dashboard`, `code` e `watchdog` fanno riferimento alla stessa build/immagine
 - **AND** il `Dockerfile` installa sia `scripts/webapp/requirements.txt` sia
   `scripts/requirements.txt`
+
+#### Scenario: l'immagine include il client SSH per il git-sync
+- **WHEN** si analizza il `Dockerfile`
+- **THEN** installa `openssh-client`, così il servizio `db` può autenticarsi verso un remote
+  git SSH usando le credenziali montate a runtime
 
 ### Requirement: Nessun segreto nell'immagine o nel repository
 L'immagine e il repository NON SHALL contenere segreti. Chiavi API, numero WhatsApp e
@@ -101,3 +107,8 @@ configurato, restando attivo, senza che un fallimento di rete arresti il contain
 - **WHEN** si ispeziona il comando/entrypoint del servizio `db`
 - **THEN** invoca `sync_manager.py sync` in un loop a intervallo configurabile
 - **AND** un errore di sync viene loggato ma non termina il processo
+
+#### Scenario: le credenziali git arrivano da mount di sola lettura
+- **WHEN** si ispezionano i volumi del servizio `db`
+- **THEN** monta in sola lettura la config git dell'operatore e la sua directory `.ssh`
+- **AND** l'autenticazione verso il remote usa quelle credenziali, non segreti inclusi nell'immagine

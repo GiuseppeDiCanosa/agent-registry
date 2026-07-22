@@ -79,6 +79,18 @@ def test_dockerfile_installs_both_requirements():
     assert "scripts/webapp/requirements.txt" in df
 
 
+def test_dockerfile_installs_ssh_client():
+    df = (ROOT / "docker" / "Dockerfile").read_text(encoding="utf-8")
+    assert "openssh-client" in df
+
+
+def test_db_mounts_git_credentials():
+    svc = _compose()["services"]["db"]
+    mounts = [str(m) for m in svc.get("volumes", [])]
+    assert any(".ssh" in m and m.endswith(":ro") for m in mounts), mounts
+    assert any(".gitconfig" in m and m.endswith(":ro") for m in mounts), mounts
+
+
 def test_db_runs_sync_loop():
     svc = _compose()["services"]["db"]
     cmd = " ".join(svc["command"]) if isinstance(svc["command"], list) else str(svc["command"])
