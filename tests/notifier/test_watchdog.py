@@ -49,6 +49,23 @@ def test_idle_emitted_once():
     assert events == []
 
 
+def test_cold_start_seeds_without_events():
+    s = [
+        {"session_id": "a", "status": "Finished", "last_activity": 1000},
+        {"session_id": "b", "status": "OnWorking", "last_activity": 2800},  # idle a now=10000
+    ]
+    events, state = watchdog.classify_events(
+        s, _state(), now=10000, idle_threshold=3600, cold_start=True
+    )
+    assert events == []  # nessuna notifica storica
+    assert state["status"]["a"] == "Finished"
+    assert state["status"]["b"] == "OnWorking"
+    # dopo il cold-start, solo un cambiamento NUOVO genera eventi
+    s2 = s + [{"session_id": "c", "status": "Finished", "last_activity": 1000}]
+    events2, _ = watchdog.classify_events(s2, state, now=10001, idle_threshold=3600)
+    assert [e[0] for e in events2] == ["executed"]  # solo c
+
+
 def test_render_idle_contains_name_and_minutes():
     pool = {"idle": ["{name}, {session_id} ferma da {minutes} minuti"]}
     agent = {"session_id": "sess1", "status": "OnWorking", "last_activity": 6400}

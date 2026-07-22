@@ -38,6 +38,18 @@ precedente per emettere ogni evento **una sola volta** per transizione.
 - **THEN** viene emesso un evento `idle` una sola volta
 - **AND** finché resta idle senza tornare attiva non vengono emessi ulteriori eventi `idle`
 
+### Requirement: Avvio a freddo senza notifiche storiche
+Al primo ciclo su un registry già popolato (nessuno stato precedente persistito), il watchdog
+SHALL registrare lo stato corrente senza emettere alcun evento; solo i cambiamenti nei cicli
+successivi SHALL generare notifiche.
+
+**Verified by**: [@test] tests/notifier/test_watchdog.py
+
+#### Scenario: nessun flood all'avvio
+- **WHEN** il watchdog classifica per la prima volta (cold start) sessioni già `Finished` o idle
+- **THEN** non emette alcun evento
+- **AND** al ciclo successivo un cambiamento nuovo genera regolarmente il suo evento
+
 ### Requirement: Messaggi da pool con placeholder
 Il watchdog SHALL scegliere a caso un messaggio dal pool dell'evento e sostituire i
 placeholder disponibili (`{name}`, `{session_id}`, `{provider}`, `{working_on}`, e `{minutes}`

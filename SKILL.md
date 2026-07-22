@@ -78,6 +78,51 @@ intatto come backup).
 
 ---
 
+## Ambiente standard: sandbox Docker + notifiche WhatsApp
+
+Da questa versione l'ambiente operativo standard della skill è una **sandbox Docker**
+(OrbStack) con **notifiche WhatsApp automatiche** su ogni evento degli agenti. Vale per
+**ogni** agente AI (Claude, Kimi, Gemini, Codex…): il comportamento è uniforme perché il
+watchdog osserva il **registry condiviso**, non il singolo agente — nessun agente deve
+implementare nulla di WhatsApp.
+
+### Avvio
+
+```bash
+cp .env.example .env      # WA_RECIPIENT, WA_SESSION_ID (UUID sessione open-wa), WA_NAME…
+docker compose up -d
+```
+
+Cinque servizi: `db` (persistenza `/data` + git-sync), `dashboard` (:8765, sempre accesa),
+`code` (runtime degli agenti), `wa-gateway` (open-wa, QR una volta), `watchdog` (notifiche).
+
+### Comportamento uniforme
+
+- Ogni agente registra la sua sessione nella home condivisa (`AGENT_REGISTRY_HOME=/data`)
+  col flusso normale (`register` … `end`/`finish`).
+- Il **watchdog** invia una notifica WhatsApp quando una sessione: **completa**
+  (`Finished` → *executed*), **si ferma** (`Stop`/`Killed` → *stopped*), o **resta idle**
+  oltre la soglia (default 1h → *idle*). Un messaggio a caso dal pool, con placeholder
+  (`{name}`, `{session_id}`, `{provider}`, `{working_on}`, `{minutes}`).
+- **Avvio a freddo sicuro**: al primo giro su un registry già popolato il watchdog registra
+  lo stato corrente **senza** notificare eventi storici; solo i cambiamenti successivi
+  generano messaggi.
+
+### Note operative
+
+- Il gateway open-wa identifica la sessione per **UUID** (non per nome): metti l'UUID in
+  `WA_SESSION_ID` (`GET /api/sessions` con `X-API-Key`).
+- Di default la sandbox usa un volume **isolato**. Per far notificare anche gli agenti che
+  girano sull'host, monta la home reale nel watchdog (bind-mount `~/.agent-registry:/data`
+  via `docker-compose.override.yml`, gitignored).
+- Il pool pubblico dei messaggi è `notifier/messages.default.json`; un pool personale in
+  `notifier/messages.local.json` (gitignored) ha la precedenza.
+
+Dettagli: sezione "Sandbox Docker" del README, capability `container-deployment` e
+`whatsapp-notifications`.
+
+---
+
 ## Flusso di sessione (obbligatorio)
 
 Ogni agente che carica questa skill DEVE seguire questo flusso.

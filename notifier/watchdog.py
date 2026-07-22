@@ -32,11 +32,14 @@ def classify_events(
     prev_state: dict[str, Any],
     now: float,
     idle_threshold: float,
+    cold_start: bool = False,
 ) -> tuple[list[tuple[str, dict[str, Any]]], dict[str, Any]]:
     """Classifica le sessioni in eventi, emettendo ogni evento una sola volta.
 
     `sessions`: dict con almeno `session_id`, `status`, `last_activity` (epoch).
     `prev_state`: {"status": {sid: last_status}, "idle_alerted": {sid: bool}}.
+    `cold_start`: se True registra lo stato corrente SENZA emettere eventi (evita il
+    flood di notifiche storiche quando il watchdog parte su un registry già popolato).
     """
     events: list[tuple[str, dict[str, Any]]] = []
     prev_status = dict(prev_state.get("status", {}))
@@ -75,7 +78,11 @@ def classify_events(
             prev_status.pop(sid, None)
             idle_alerted.pop(sid, None)
 
-    return events, {"status": prev_status, "idle_alerted": idle_alerted}
+    new_state = {"status": prev_status, "idle_alerted": idle_alerted}
+    if cold_start:
+        # Stato seminato ma nessuna notifica: solo i cambiamenti FUTURI generano eventi.
+        return [], new_state
+    return events, new_state
 
 
 def _apply(template: str, mapping: dict[str, str]) -> str:
@@ -169,13 +176,20 @@ def main() -> None:
 
     pool = load_pool(notifier_dir)
     state_path = home / ".watchdog-state.json"
+    cold = not state_path.exists()
     state = _load_state(state_path)
     print(f"[watchdog] avvio (home={home}, idle>{idle_threshold}s, ogni {interval}s)")
+    if cold:
+        print("[watchdog] avvio a freddo: semino lo stato corrente senza notifiche storiche")
 
+    first_cycle = cold
     while True:
         sessions = _read_sessions(home)
         now = time.time()
-        events, state = classify_events(sessions, state, now, idle_threshold)
+        events, state = classify_events(
+            sessions, state, now, idle_threshold, cold_start=first_cycle
+        )
+        first_cycle = False
         for etype, agent in events:
             text = render_message(etype, agent, pool, name=name, now=now)
             if recipient:
