@@ -96,6 +96,19 @@ def _apply(template: str, mapping: dict[str, str]) -> str:
     return out
 
 
+def _sign(text: str, provider: str) -> str:
+    """Appone la firma del provider della sessione.
+
+    La firma non sta nelle stringhe del pool né nel testo composto dall'agente:
+    è questa funzione ad apporla, ed è l'unico punto in cui esiste. Per questo un
+    provider mai visto prima firma col proprio nome senza che questo file cambi.
+    """
+    provider = (provider or "").strip()
+    if not provider:
+        return text
+    return f"{text}\n— {provider}"
+
+
 def render_message(
     event_type: str,
     agent: dict[str, Any],
@@ -105,7 +118,15 @@ def render_message(
     now: float | None = None,
     rng: random.Random | None = None,
 ) -> str:
-    """Sceglie a caso un messaggio dal pool dell'evento e sostituisce i placeholder."""
+    """Il testo composto dall'agente se c'è, altrimenti il pool; poi la firma.
+
+    Il testo composto va verbatim: l'agente l'ha scritto con la propria voce e
+    nessun placeholder viene sostituito al suo interno.
+    """
+    composed = (agent.get("notify") or {}).get(event_type)
+    if composed:
+        return _sign(str(composed), agent.get("provider", ""))
+
     messages = pool.get(event_type) or ["{name}"]
     picker = rng or random
     template = picker.choice(messages)
@@ -115,7 +136,7 @@ def render_message(
     if now and last:
         minutes = str(int((now - last) // 60))
 
-    return _apply(
+    text = _apply(
         template,
         {
             "name": name or "capo",
@@ -125,6 +146,7 @@ def render_message(
             "minutes": minutes,
         },
     )
+    return _sign(text, agent.get("provider", ""))
 
 
 def load_pool(notifier_dir: str) -> dict[str, list[str]]:
@@ -153,6 +175,114 @@ def _read_sessions(home: Path) -> list[dict[str, Any]]:
         data["last_activity"] = path.stat().st_mtime
         out.append(data)
     return out
+
+
+WATCHDOG_LOCK_OWNER = "watchdog"
+
+
+def _lock_manager() -> Any:
+    """Importa `lock_manager` da scripts/ (presente anche nell'immagine)."""
+    scripts = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"
+    )
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import lock_manager  # noqa: PLC0415 (import locale: non serve ai test puri)
+
+    return lock_manager
+
+
+def consume_notify(home: Path, session_id: str, event_type: str) -> bool:
+    """Rimuove dal file di sessione il testo composto appena inviato.
+
+    Una composizione produce esattamente un invio. Due cautele, entrambe
+    necessarie:
+
+    - il file appartiene all'agente, che può scriverlo in questo stesso istante:
+      la riscrittura avviene sotto il lock di `lock_manager`, e se il lock è
+      occupato si rinuncia — il messaggio è già partito, e riprovare al ciclo
+      successivo costa meno che corrompere il file di un altro processo;
+    - l'`mtime` è la sorgente di `last_activity`: se lo aggiornassimo, il
+      watchdog leggerebbe la propria scrittura come attività dell'agente e
+      sopprimerebbe l'evento `idle` che ha il compito di rilevare. Lo
+      ripristiniamo con `os.utime()`.
+
+    Ritorna True se la chiave è stata rimossa.
+    """
+    import yaml  # import locale: non serve ai test puri
+
+    path = home / "sessions" / f"{session_id}.yaml"
+    if not path.exists():
+        return False
+
+    try:
+        lm = _lock_manager()
+        result = lm.acquire_lock(str(path), WATCHDOG_LOCK_OWNER)
+    except Exception as exc:  # lock_manager assente o inutilizzabile
+        print(f"[watchdog] lock non disponibile per {session_id}: {exc}")
+        return False
+    if not result.get("locked"):
+        print(f"[watchdog] {session_id} è in uso da {result.get('session_id')}: non consumo")
+        return False
+
+    try:
+        stat = path.stat()
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        notify = data.get("notify") or {}
+        if event_type not in notify:
+            return False
+        notify.pop(event_type)
+        if notify:
+            data["notify"] = notify
+        else:
+            data.pop("notify", None)
+        path.write_text(
+            yaml.safe_dump(data, sort_keys=False, allow_unicode=True,
+                           default_flow_style=False),
+            encoding="utf-8",
+        )
+        os.utime(path, (stat.st_atime, stat.st_mtime))
+        return True
+    except Exception as exc:  # best-effort: un ciclo non deve morire qui
+        print(f"[watchdog] consumo fallito per {session_id}: {exc}")
+        return False
+    finally:
+        try:
+            lm.release_lock(str(path), WATCHDOG_LOCK_OWNER)
+        except Exception:
+            pass
+
+
+def deliver_events(
+    events: list[tuple[str, dict[str, Any]]],
+    home: Path,
+    pool: dict[str, list[str]],
+    *,
+    name: str = "",
+    recipient: str = "",
+    now: float | None = None,
+) -> None:
+    """Rende e spedisce gli eventi di un ciclo, consumando i testi composti.
+
+    Estratta dal loop perché la regola che conta — si consuma **solo** dopo un
+    invio riuscito — dentro un `while True` non sarebbe verificabile.
+    """
+    for etype, agent in events:
+        text = render_message(etype, agent, pool, name=name, now=now)
+        composed = bool((agent.get("notify") or {}).get(etype))
+        if not recipient:
+            print(f"[watchdog] (nessun WA_RECIPIENT) {etype}: {text}")
+            continue
+        try:
+            wa_client.send_text(text, recipient)
+        except Exception as exc:
+            # Il testo composto resta nel file: riparte al ciclo successivo.
+            print(f"[watchdog] invio fallito ({etype}): {exc}")
+            continue
+        origin = "composto" if composed else "pool"
+        print(f"[watchdog] inviato {etype} ({origin}) -> {agent.get('session_id')}")
+        if composed:
+            consume_notify(home, str(agent.get("session_id", "")), etype)
 
 
 def _load_state(path: Path) -> dict[str, Any]:
@@ -193,16 +323,7 @@ def main() -> None:
             sessions, state, now, idle_threshold, cold_start=first_cycle
         )
         first_cycle = False
-        for etype, agent in events:
-            text = render_message(etype, agent, pool, name=name, now=now)
-            if recipient:
-                try:
-                    wa_client.send_text(text, recipient)
-                    print(f"[watchdog] inviato {etype} -> {agent.get('session_id')}")
-                except Exception as exc:
-                    print(f"[watchdog] invio fallito ({etype}): {exc}")
-            else:
-                print(f"[watchdog] (nessun WA_RECIPIENT) {etype}: {text}")
+        deliver_events(events, home, pool, name=name, recipient=recipient, now=now)
         _save_state(state_path, state)
         time.sleep(interval)
 

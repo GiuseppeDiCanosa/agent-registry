@@ -480,11 +480,16 @@ def register_session(
     space: list[str] | None = None,
     todo_present: list[str] | None = None,
     registry_path: Path | None = None,
+    notify_started: str | None = None,
 ) -> dict[str, Any]:
     """Registra una nuova sessione agente nel registry.
 
     Cattura automaticamente pid, cmdline, progetto (directory corrente) e
     branch git (vuoto se non è un repo, senza fallire).
+
+    `notify_started` è il testo di notifica che l'agente ha composto per il
+    proprio avvio: facoltativo, e se assente il file non porta affatto la mappa
+    `notify` — il watchdog ripiega sul pool statico.
     """
     home = _prepare_home(registry_path)
     agent = {
@@ -508,6 +513,8 @@ def register_session(
         "project": Path.cwd().name,
         "git_branch": _git_branch(),
     }
+    if notify_started:
+        agent["notify"] = {"started": notify_started}
     # Scrittura del file sessione e rigenerazione della vista nella stessa
     # sezione critica: senza, due processi possono rendere la vista da
     # snapshot diversi e l'ultimo che scrive nasconde l'altro.
@@ -534,6 +541,10 @@ def update_session(
         for key, value in kwargs.items():
             if key == "todo" and isinstance(value, dict):
                 agent.setdefault("todo", {}).update(value)
+            elif key == "notify" and isinstance(value, dict):
+                # Merge come per `todo`: depositare il messaggio di un evento non
+                # deve cancellare quello di un altro evento ancora da spedire.
+                agent.setdefault("notify", {}).update(value)
             else:
                 agent[key] = value
         _write_session(agent, home)
@@ -543,21 +554,34 @@ def update_session(
 
 
 def unregister_session(
-    session_id: str, registry_path: Path | None = None
+    session_id: str,
+    registry_path: Path | None = None,
+    notify_executed: str | None = None,
 ) -> dict[str, Any] | None:
     """Marca una sessione come Finished, svuota do_not_touch e rilascia i lock.
 
     Rilasciare i lock qui elimina la divergenza fra registry e `locks/`: senza,
     i lock resterebbero appesi fino al timeout chiedendo all'agente di
     rilasciarli a mano.
+
+    `notify_executed` è il testo che l'agente ha composto per la propria
+    chiusura: facoltativo, depositato nello stesso aggiornamento che marca
+    Finished — l'evento e il suo messaggio arrivano al watchdog insieme.
     """
     home = _prepare_home(registry_path)
     agent = _read_session(home, session_id)
     if agent is None:
         return None
     held = [str(p) for p in agent.get("do_not_touch") or []]
+    extra: dict[str, Any] = {}
+    if notify_executed:
+        extra["notify"] = {"executed": notify_executed}
     finished = update_session(
-        session_id, registry_path=registry_path, status="Finished", do_not_touch=[]
+        session_id,
+        registry_path=registry_path,
+        status="Finished",
+        do_not_touch=[],
+        **extra,
     )
     # Fuori dalla sezione critica del registry: i lock hanno il proprio flock
     # e release_lock rifiuta i path di cui la sessione non è owner.
@@ -1085,6 +1109,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("working_on")
     p.add_argument("--space", help="lista CSV di file/aree di lavoro")
     p.add_argument("--todo-present", dest="todo_present", help="lista CSV todo correnti")
+    p.add_argument(
+        "--notify-started",
+        dest="notify_started",
+        help="testo di notifica composto dall'agente per il proprio avvio",
+    )
 
     p = sub.add_parser("update", help="aggiorna i campi di una sessione")
     p.add_argument("session_id")
@@ -1099,6 +1128,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("finish", help="marca la sessione Finished e svuota i lock")
     p.add_argument("session_id")
+    p.add_argument(
+        "--notify-executed",
+        dest="notify_executed",
+        help="testo di notifica composto dall'agente per la propria chiusura",
+    )
 
     p = sub.add_parser("handoff", help="registra il riferimento a un handoff")
     p.add_argument("session_id")
@@ -1165,6 +1199,7 @@ def main(argv: list[str] | None = None) -> int:
             working_on=args.working_on,
             space=_split_csv(args.space),
             todo_present=_split_csv(args.todo_present),
+            notify_started=args.notify_started,
         )
         print(f"Registrato: {agent['session_id']}")
     elif args.command == "update":
@@ -1196,7 +1231,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print("Aggiornato.")
     elif args.command == "finish":
-        if unregister_session(args.session_id) is None:
+        if unregister_session(
+            args.session_id, notify_executed=args.notify_executed
+        ) is None:
             print(f"Sessione '{args.session_id}' non trovata.", file=sys.stderr)
             return 1
         print("Sessione terminata.")

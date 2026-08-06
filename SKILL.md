@@ -100,13 +100,44 @@ Cinque servizi: `db` (persistenza `/data` + git-sync), `dashboard` (:8765, sempr
 
 - Ogni agente registra la sua sessione nella home condivisa (`AGENT_REGISTRY_HOME=/data`)
   col flusso normale (`register` … `end`/`finish`).
-- Il **watchdog** invia una notifica WhatsApp quando una sessione: **completa**
-  (`Finished` → *executed*), **si ferma** (`Stop`/`Killed` → *stopped*), o **resta idle**
-  oltre la soglia (default 1h → *idle*). Un messaggio a caso dal pool, con placeholder
-  (`{name}`, `{session_id}`, `{provider}`, `{working_on}`, `{minutes}`).
+- Il **watchdog** invia una notifica WhatsApp quando una sessione: **parte**
+  (`OnWorking` → *started*), **completa** (`Finished` → *executed*), **si ferma**
+  (`Stop`/`Killed` → *stopped*), o **resta idle** oltre la soglia (default 1h →
+  *idle*). Il testo è quello composto dall'agente se c'è, altrimenti un messaggio
+  a caso dal pool, con placeholder (`{name}`, `{session_id}`, `{provider}`,
+  `{working_on}`, `{minutes}`).
+- La **firma** è sempre quella del `provider` della sessione e la appone il
+  watchdog: non va scritta nel testo, né nelle stringhe del pool. Un provider
+  nuovo firma col proprio nome senza che nessun file cambi.
 - **Avvio a freddo sicuro**: al primo giro su un registry già popolato il watchdog registra
   lo stato corrente **senza** notificare eventi storici; solo i cambiamenti successivi
   generano messaggi.
+
+### Scrivi tu il tuo messaggio
+
+Le notifiche le puoi scrivere **tu**, con la tua voce, invece di lasciarle al
+pool di frasi preconfezionate. Costa un parametro:
+
+```bash
+python3 scripts/registry_manager.py register <id> <provider> <versione> "<lavoro>" \
+    --notify-started "Parto sul notifier, torno quando c'è qualcosa da vedere."
+
+python3 scripts/registry_manager.py finish <id> \
+    --notify-executed "Chiuso: 22 test verdi e il watchdog non tocca più l'mtime."
+```
+
+Tre regole:
+
+1. **Non firmare.** La firma la mette il watchdog leggendo il tuo `provider`. Se
+   la scrivi anche tu, arriva doppia.
+2. **Solo `started` ed `executed`.** `stopped` e `idle` scattano quando sei
+   fermo o morto: quei testi non puoi scriverli, e restano al pool.
+3. **Facoltativo.** Nessun comando fallisce se ometti il parametro: si ripiega
+   sul pool. Ma un messaggio scritto da te dice cos'è successo davvero, e quello
+   del pool no.
+
+Il testo viene spedito verbatim — niente placeholder sostituiti al suo interno —
+e consumato: una composizione, un invio.
 
 ### Note operative
 
