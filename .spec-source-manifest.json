@@ -63,6 +63,55 @@
         "tests": [
           "tests/test_registry_manager.py"
         ]
+      },
+      "proposta-del-setup-multi-macchina-al-primo-avvio": {
+        "name": "Proposta del setup multi-macchina al primo avvio",
+        "tests": []
+      }
+    }
+  },
+  "openspec/specs/agent-registry-dashboard/spec.md": {
+    "targets": [
+      "scripts/webapp/main.py",
+      "scripts/webapp/static/index.html"
+    ],
+    "requirements": {
+      "setup-wizard-multi-macchina-in-dashboard": {
+        "name": "Setup wizard multi-macchina in dashboard",
+        "tests": [
+          "tests/test_webapp.py"
+        ]
+      }
+    }
+  },
+  "openspec/specs/agent-registry-storage/spec.md": {
+    "targets": [
+      "scripts/sync_manager.py"
+    ],
+    "requirements": {
+      "pre-validazione-del-remote-prima-del-setup": {
+        "name": "Pre-validazione del remote prima del setup",
+        "tests": [
+          "tests/test_sync_manager.py"
+        ]
+      },
+      "setup-guidato-a-tre-rami": {
+        "name": "Setup guidato a tre rami",
+        "tests": [
+          "tests/test_sync_manager.py"
+        ]
+      },
+      "warning-su-repository-pubblico": {
+        "name": "Warning su repository pubblico",
+        "tests": [
+          "tests/test_sync_manager.py"
+        ]
+      },
+      "identit-git-per-macchina": {
+        "name": "Identità git per macchina",
+        "tests": [
+          "tests/test_sync_manager.py"
+        ]
       }
     }
   },

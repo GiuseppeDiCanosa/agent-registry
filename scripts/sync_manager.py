@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# GENERATED FROM SPEC — DO NOT EDIT DIRECTLY
+# Source: openspec/specs/agent-registry-storage/spec.md
 """Gestore del git-sync multi-macchina per la home agent-registry.
 
 La home `~/.agent-registry/` (o `AGENT_REGISTRY_HOME`) può essere un

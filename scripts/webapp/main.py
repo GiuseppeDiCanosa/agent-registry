@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# GENERATED FROM SPEC — DO NOT EDIT DIRECTLY
+# Source: openspec/specs/agent-registry-dashboard/spec.md
 """Web-app FastAPI per il monitoraggio e la gestione del registry agent-registry.
 
 Dashboard operativa (D10): vista giornaliera di default, filtri
