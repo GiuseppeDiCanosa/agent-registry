@@ -32,4 +32,4 @@
 - [x] 6.1 `verify.sh` (spec-verify) verde
 - [x] 6.2 `work-review` requisito-per-requisito
 - [x] 6.3 README/SKILL: sezione avvio via Docker
-- [ ] 6.4 Commit + **push pubblico** (bump v0.4.0) — solo dopo conferma esplicita utente
+- [x] 6.4 Commit + **push pubblico** — conferma esplicita di Giuseppe il 2026-08-07; releases v0.4.0 e v0.5.0 già nel changelog

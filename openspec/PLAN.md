@@ -48,7 +48,7 @@ non sono calcolabili — vanno riempiti dopo E01, mai a mano.
   stampa `0` e la directory esiste sotto `archive/` — cioè `verify.sh` verde,
   `work-review` fatta, README/SKILL con la sezione di avvio via Docker, e il push
   pubblico eseguito o esplicitamente rinunciato.
-- **State**: approved
+- **State**: done
 - **Approved by**: Giuseppe Di Canosa
 - **Approved at**: 2026-08-05 19:04
 - **Approval hash**: sha256:addce8bde7d925a5
@@ -56,7 +56,11 @@ non sono calcolabili — vanno riempiti dopo E01, mai a mano.
 **Voce retroattiva, e vale la pena dirlo invece di normalizzarlo**: questo change
 è partito e ha prodotto una release (v0.4.0, v0.5.0) prima che il piano
 esistesse. Senza questa voce il gate risponderà `NO-ENTRY` su di lui appena E01
-è in piedi. Restano aperti i task 6.1–6.4 di `tasks.md`.
+è in piedi. Chiusa il 2026-08-07: i task 6.1–6.3 erano già fatti, il 6.4 (push
+pubblico) è stato autorizzato esplicitamente da Giuseppe. Archiviata con
+`--skip-specs`: la sua delta cita ancora "Rilevamento dei **tre** eventi di
+notifica", requisito che E04 ha nel frattempo rinominato in "quattro", quindi
+riapplicarla avrebbe riaperto un requisito superato.
 
 ### E03 — Il wizard di setup del sync è archiviato
 
@@ -65,7 +69,7 @@ esistesse. Senza questa voce il gate risponderà `NO-ENTRY` su di lui appena E01
 - **Done when**: la directory è sotto `openspec/changes/archive/` e ogni riga
   `### Requirement:` dei suoi delta compare identica nella spec canonica
   corrispondente sotto `openspec/specs/`.
-- **State**: approved
+- **State**: done
 - **Approved by**: Giuseppe Di Canosa
 - **Approved at**: 2026-08-05 19:04
 - **Approval hash**: sha256:f6a700bbc079fe96
@@ -83,12 +87,23 @@ non lavoro nuovo.
   watchdog contatti alcuna API LLM (verificabile con il container senza rete
   verso l'esterno); e nessuna stringa di `notifier/messages.default.json`
   contiene una firma hardcoded.
-- **State**: in-progress
+- **State**: done
 - **Approved by**: Giuseppe Di Canosa
 - **Approved at**: 2026-08-05 19:47
 - **Approval hash**: sha256:5f5aaf59296c001e
 
-Il contratto deciso in sessione, che il change dovrà specificare:
+**Chiusa con una riserva, e la riserva va detta.** Metà del `Done when` è stata
+osservata dal vivo: il 2026-08-06 una sessione Claude ha prodotto una notifica
+composta, firmata `Claude`, consegnata su WhatsApp. L'altra metà — la firma
+`Codex` — è coperta solo dai test unitari. Il tentativo di osservarla il
+2026-08-07 è fallito per una ragione esterna al change: il gateway open-wa era in
+crash-loop (`Session ready` → `Page crashed` ogni ~15s), e il watchdog rispondeva
+`HTTP 409 Session is not connected` su ogni invio. Il codice della firma non è in
+discussione — è un solo punto (`_sign`, che restituisce il `provider` della
+sessione) e il test blinda che né `Claude` né `Codex` compaiano nel sorgente — ma
+finché il gateway non torna su, questa metà resta non osservata.
+
+Il contratto deciso in sessione, che il change ha poi specificato:
 
 - **Chi scrive firma.** La firma identifica l'agente che ha *composto* il testo,
   non quello che ha fatto scattare l'evento. Oggi le 24 stringhe di
