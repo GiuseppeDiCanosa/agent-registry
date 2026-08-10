@@ -14,3 +14,8 @@
 2026-08-06 02:24  openspec-apply-change  task 6.3 done: README/SKILL avvio Docker staged, UUID/API key open-wa e AGENT_REGISTRY_DATA_SOURCE
 --- consolidated up to HANDOFF-004 ---
 --- consolidated up to HANDOFF-005 ---
+2026-08-07 20:10  openspec-archive       E02, E03, E04 archiviate; check-plan-gate PASSED (0 active change(s), 4 plan entries)
+2026-08-07 20:12  plan-mode              entry E02 approved -> done
+2026-08-07 20:12  plan-mode              entry E03 approved -> done
+2026-08-07 20:12  plan-mode              entry E04 in-progress -> done (riserva scritta nella voce: firma Codex non osservata dal vivo, gateway in crash-loop)
+2026-08-07 20:30  session-close          main pubblico allineato: ac10c6d..24fbb5a; 235 test verdi
