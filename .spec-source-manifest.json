@@ -57,6 +57,61 @@
         "tests": [
           "tests/test_registry_cli.py"
         ]
+      },
+      "deposito-del-messaggio-di-notifica-composto-dall-agente": {
+        "name": "Deposito del messaggio di notifica composto dall'agente",
+        "tests": [
+          "tests/test_registry_manager.py"
+        ]
+      },
+      "proposta-del-setup-multi-macchina-al-primo-avvio": {
+        "name": "Proposta del setup multi-macchina al primo avvio",
+        "tests": []
+      }
+    }
+  },
+  "openspec/specs/agent-registry-dashboard/spec.md": {
+    "targets": [
+      "scripts/webapp/main.py",
+      "scripts/webapp/static/index.html"
+    ],
+    "requirements": {
+      "setup-wizard-multi-macchina-in-dashboard": {
+        "name": "Setup wizard multi-macchina in dashboard",
+        "tests": [
+          "tests/test_webapp.py"
+        ]
+      }
+    }
+  },
+  "openspec/specs/agent-registry-storage/spec.md": {
+    "targets": [
+      "scripts/sync_manager.py"
+    ],
+    "requirements": {
+      "pre-validazione-del-remote-prima-del-setup": {
+        "name": "Pre-validazione del remote prima del setup",
+        "tests": [
+          "tests/test_sync_manager.py"
+        ]
+      },
+      "setup-guidato-a-tre-rami": {
+        "name": "Setup guidato a tre rami",
+        "tests": [
+          "tests/test_sync_manager.py"
+        ]
+      },
+      "warning-su-repository-pubblico": {
+        "name": "Warning su repository pubblico",
+        "tests": [
+          "tests/test_sync_manager.py"
+        ]
+      },
+      "identit-git-per-macchina": {
+        "name": "Identità git per macchina",
+        "tests": [
+          "tests/test_sync_manager.py"
+        ]
       }
     }
   },
@@ -70,6 +125,12 @@
     "requirements": {
       "servizi-che-condividono-la-home-del-registry": {
         "name": "Servizi che condividono la home del registry",
+        "tests": [
+          "tests/docker/test_compose.py"
+        ]
+      },
+      "home-dati-configurabile": {
+        "name": "Home dati configurabile",
         "tests": [
           "tests/docker/test_compose.py"
         ]
@@ -167,8 +228,14 @@
       "notifier/wa_client.py"
     ],
     "requirements": {
-      "rilevamento-dei-tre-eventi-di-notifica": {
-        "name": "Rilevamento dei tre eventi di notifica",
+      "rilevamento-dei-quattro-eventi-di-notifica": {
+        "name": "Rilevamento dei quattro eventi di notifica",
+        "tests": [
+          "tests/notifier/test_watchdog.py"
+        ]
+      },
+      "avvio-a-freddo-senza-notifiche-storiche": {
+        "name": "Avvio a freddo senza notifiche storiche",
         "tests": [
           "tests/notifier/test_watchdog.py"
         ]
@@ -179,8 +246,20 @@
           "tests/notifier/test_watchdog.py"
         ]
       },
+      "consumo-del-messaggio-composto-senza-alterare-l-inattivit": {
+        "name": "Consumo del messaggio composto senza alterare l'inattività",
+        "tests": [
+          "tests/notifier/test_watchdog.py"
+        ]
+      },
       "invio-via-gateway-esterno-senza-segreti-hardcoded": {
         "name": "Invio via gateway esterno senza segreti hardcoded",
+        "tests": [
+          "tests/notifier/test_watchdog.py"
+        ]
+      },
+      "degradazione-sicura-della-firma-e-del-consumo": {
+        "name": "Degradazione sicura della firma e del consumo",
         "tests": [
           "tests/notifier/test_watchdog.py"
         ]

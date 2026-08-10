@@ -16,7 +16,6 @@ file dedicato che non viene mai sostituito, distinto dal file che viene riscritt
 Il registry è inoltre l'unico artefatto che agenti di provider diversi toccano tutti, dato
 che non condividono alcun sistema di skill: per questo porta con sé il protocollo di
 coordinamento che li istruisce.
-
 ## Requirements
 ### Requirement: Aggiornamenti concorrenti che non si perdono
 Il registry manager SHALL serializzare l'intero ciclo di lettura-modifica-scrittura del registry, in modo che aggiornamenti provenienti da processi distinti e simultanei siano tutti preservati. Il lock che protegge il ciclo MUST essere tenuto su un file dedicato che non viene mai sostituito, così che la scrittura atomica del registry tramite rename non invalidi il lock stesso; il manager MUST NOT eseguire la lettura fuori dalla sezione critica che ne protegge la scrittura.
@@ -144,4 +143,45 @@ Il registry manager SHALL esporre i comandi `register`, `update`, `finish`, `han
 #### Scenario: Argomenti mancanti
 - **WHEN** un comando viene invocato senza gli argomenti richiesti
 - **THEN** il comando esce con codice diverso da 0 e stampa l'uso corretto, senza traceback
+
+### Requirement: Deposito del messaggio di notifica composto dall'agente
+Il registry SHALL permettere a un agente di depositare, nel proprio file di sessione, il testo di notifica che ha composto per un evento, sotto una mappa `notify` con una chiave per evento. La CLI SHALL accettare quel testo al momento di registrare e di chiudere una sessione tramite parametri **facoltativi**: una chiamata che non li passa SHALL comportarsi esattamente come prima del change, e nessun comando SHALL fallire per la loro assenza. Il deposito SHALL usare lo stesso percorso di scrittura concorrente degli altri campi di sessione, così che un deposito non possa perdere un aggiornamento fatto in parallelo.
+
+**Verified by**: [@test] tests/test_registry_manager.py
+
+#### Scenario: deposito al momento della registrazione
+- **WHEN** una sessione viene registrata passando il testo per l'evento `started`
+- **THEN** il file di sessione contiene quel testo sotto `notify`, alla chiave dell'evento
+
+#### Scenario: deposito alla chiusura
+- **WHEN** una sessione viene chiusa passando il testo per l'evento `executed`
+- **THEN** il file di sessione contiene quel testo sotto `notify`, alla chiave dell'evento
+
+#### Scenario: i parametri restano facoltativi
+- **WHEN** una sessione viene registrata o chiusa senza passare alcun testo
+- **THEN** il comando riesce con lo stesso esito che aveva prima del change
+- **AND** il file di sessione non contiene la mappa `notify`
+
+#### Scenario: il deposito non cancella gli altri eventi
+- **WHEN** una sessione che ha già un testo per un evento ne deposita uno per un evento diverso
+- **THEN** la mappa `notify` contiene entrambi i testi
+
+### Requirement: Proposta del setup multi-macchina al primo avvio
+Quando l'agente legge il registry all'avvio della sessione e rileva che il git-sync non è configurato, il sistema (tramite le istruzioni della skill) SHALL proporre all'utente la configurazione del multi-macchina. Se l'utente accetta, l'agente SHALL avviare la dashboard in background e aprire il browser sulla setup card; se l'utente rifiuta o rimanda, l'agente MUST NOT riproporre il setup nella stessa sessione e SHALL proseguire normalmente in modalità single-macchina.
+
+#### Scenario: Sync non configurato
+- **WHEN** l'agente legge lo stato del registry e il git-sync risulta non configurato
+- **THEN** l'agente SHALL proporre all'utente il setup multi-macchina indicando che è completabile dalla dashboard
+
+#### Scenario: Utente accetta
+- **WHEN** l'utente accetta la proposta di setup
+- **THEN** l'agente SHALL avviare la dashboard e aprire il browser, lasciando all'utente l'inserimento dell'URL remote nella setup card
+
+#### Scenario: Utente rifiuta
+- **WHEN** l'utente rifiuta o ignora la proposta
+- **THEN** l'agente SHALL proseguire la sessione senza sync e MUST NOT riproporre il setup nella stessa sessione
+
+#### Scenario: Porta dashboard occupata
+- **WHEN** l'avvio della dashboard fallisce perché la porta di default è occupata
+- **THEN** l'agente SHALL riusare l'istanza già in ascolto se è la dashboard del registry, altrimenti SHALL avviare su una porta libera e comunicare l'URL corretto
 

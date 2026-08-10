@@ -305,3 +305,52 @@ def test_git_branch_captured_in_repo(tmp_home, monkeypatch, tmp_path):
     agent = rm.register_session("sid-1", "Kimi", "2.7", "Test")
     assert agent["git_branch"] == expected
     assert agent["project"] == "repo"
+
+
+# --- Deposito del messaggio di notifica composto dall'agente ---
+
+
+def test_register_deposita_notify_started(tmp_home):
+    rm.register_session(
+        "sid-notify-1", "Claude", "opus-5", "Test", notify_started="Parto sul notifier."
+    )
+    data = yaml.safe_load(
+        (tmp_home / "sessions" / "sid-notify-1.yaml").read_text(encoding="utf-8")
+    )
+    assert data["notify"] == {"started": "Parto sul notifier."}
+
+
+def test_finish_deposita_notify_executed(tmp_home):
+    rm.register_session("sid-notify-2", "Codex", "gpt-5", "Test")
+    rm.unregister_session("sid-notify-2", notify_executed="Ho chiuso il refactor.")
+    data = yaml.safe_load(
+        (tmp_home / "sessions" / "sid-notify-2.yaml").read_text(encoding="utf-8")
+    )
+    assert data["notify"] == {"executed": "Ho chiuso il refactor."}
+    assert data["status"] == "Finished"
+
+
+def test_notify_parametri_facoltativi(tmp_home):
+    """Senza i parametri il comportamento è quello di prima: nessuna mappa notify."""
+    agent = rm.register_session("sid-notify-3", "Claude", "opus-5", "Test")
+    rm.unregister_session("sid-notify-3")
+    data = yaml.safe_load(
+        (tmp_home / "sessions" / "sid-notify-3.yaml").read_text(encoding="utf-8")
+    )
+    assert "notify" not in agent
+    assert "notify" not in data
+
+
+def test_notify_non_cancella_gli_altri_eventi(tmp_home):
+    """Depositare un evento non deve perdere il messaggio di un altro evento."""
+    rm.register_session(
+        "sid-notify-4", "Claude", "opus-5", "Test", notify_started="Parto sul notifier."
+    )
+    rm.unregister_session("sid-notify-4", notify_executed="Ho chiuso il refactor.")
+    data = yaml.safe_load(
+        (tmp_home / "sessions" / "sid-notify-4.yaml").read_text(encoding="utf-8")
+    )
+    assert data["notify"] == {
+        "started": "Parto sul notifier.",
+        "executed": "Ho chiuso il refactor.",
+    }

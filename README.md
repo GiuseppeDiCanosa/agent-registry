@@ -28,11 +28,15 @@ open http://dashboard.agent-registry.orb.local   # o http://localhost:8765
 ```
 
 Per le notifiche WhatsApp, avvia il gateway e collega l'account **scansionando il
-QR** una volta (necessario, richiede il telefono):
+QR** una volta (necessario, richiede il telefono). Poi recupera l'UUID della
+sessione con `GET /api/sessions` autenticato tramite `X-API-Key`, configura UUID,
+API key e destinatario in `.env`, e avvia il watchdog:
 
 ```bash
-docker compose up -d wa-gateway watchdog
+docker compose up -d wa-gateway
 # apri il gateway e scansiona il QR con WhatsApp del telefono
+## aggiorna .env: WA_SESSION_ID=<uuid>, WA_API_KEY=<chiave>, WA_RECIPIENT=<numero>
+docker compose up -d watchdog
 ```
 
 Il servizio **db** sincronizza la home verso il remote git via **SSH**: l'immagine
@@ -44,8 +48,9 @@ I segreti (numero, API key, credenziali git) stanno solo in `.env` (gitignored).
 Il pool pubblico dei messaggi è `notifier/messages.default.json` (templato,
 neutro); un pool personale può essere messo in `notifier/messages.local.json`
 (gitignored), che ha la precedenza. La home `/data` è un volume isolato: per
-condividere il registry con gli agenti dell'host, sostituisci il named volume con
-un bind-mount `~/.agent-registry:/data` in `docker-compose.yml`.
+condividere il registry con gli agenti dell'host, imposta in `.env`
+`AGENT_REGISTRY_DATA_SOURCE` al percorso assoluto di `~/.agent-registry` (oppure usa
+un `docker-compose.override.yml` gitignored); non modificare il compose generato.
 
 ## Cosa è cambiato nella 0.5.0
 
