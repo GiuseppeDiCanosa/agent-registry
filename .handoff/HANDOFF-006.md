@@ -82,14 +82,41 @@ Valori non rigenerabili da comando:
 
 ### In sospeso
 
-- [ ] **Gateway open-wa in crash-loop** — nessuna notifica esce dalla sandbox
-  finché non è risolto. Ipotesi non verificata: `/dev/shm` troppo piccolo per
-  Chromium (il default Docker è 64 MB; il compose non imposta `shm_size`). La
-  diagnosi è stata interrotta su richiesta di Giuseppe, che dice di aver trovato
-  la causa — **chiedergli quale prima di reinvestigare**.
+- [ ] **Gateway open-wa: crash-loop il 2026-08-07, tornato a consegnare dopo.**
+  Ipotesi mai verificata: `/dev/shm` troppo piccolo per Chromium (il default
+  Docker è 64 MB; il compose non imposta `shm_size`). La diagnosi è stata
+  interrotta su richiesta di Giuseppe, che dice di aver trovato la causa —
+  **chiedergli quale prima di reinvestigare**. A fine sessione il log mostra
+  `inviato started (composto) -> claude-1786372837`, quindi la catena funziona di
+  nuovo; non è noto se per un intervento o da sé.
 - [ ] **Firma `Codex` mai osservata dal vivo**: metà del `Done when` di E04.
   Coperta dai test unitari, non da un invio reale. Il tentativo del 2026-08-07 è
   fallito sul gateway, non sul codice.
+- [ ] **BUG: un invio fallito fa perdere l'evento per sempre.** Trovato a fine
+  sessione con evidenza diretta. `notifier/watchdog.py:322-327`:
+
+  ```python
+  events, state = classify_events(...)
+  deliver_events(events, home, pool, ...)   # può fallire
+  _save_state(state_path, state)            # salva comunque
+  ```
+
+  Lo stato avanza anche quando `deliver_events` non ha spedito nulla. Il commento
+  a `watchdog.py:279` dichiara "Il testo composto resta nel file: riparte al ciclo
+  successivo", ma non riparte: `classify_events` genera l'evento dal *confronto*
+  fra stato salvato e stato attuale, e lo stato salvato è già avanzato. Il testo
+  composto resta nel registry per sempre, mai spedito.
+
+  Evidenza: la sessione `claude-1786111560` di questo handoff. `started` fallito
+  con `HTTP 409` durante il crash-loop del gateway, `.watchdog-state.json` la
+  riporta comunque `Finished`, e il suo file di sessione ha ancora **entrambi** i
+  testi in `notify` non consumati. Nessun test lo cattura, perché
+  `deliver_events` è testata isolata dal salvataggio dello stato.
+
+  Fix probabile: salvare lo stato solo per gli eventi effettivamente consegnati,
+  cioè far tornare a `deliver_events` l'insieme dei recapiti riusciti. Ma
+  `watchdog.py` è un `targets` di `whatsapp-notifications`: serve prima la spec e
+  una voce di piano.
 - [ ] **Warning del lock del watchdog**, ereditato da HANDOFF-005 e non
   affrontato: `[lock_manager] warning: sessione 'watchdog' non trovata nel
   registry; lock non sincronizzato` a ogni consumo. Il lock filesystem funziona,
@@ -136,17 +163,28 @@ Valori non rigenerabili da comando:
   browser interno.
 - **`docker stats` come indizio di salute**: 520 MB e 1.4% di CPU sembravano
   normali. Il crash-loop si vede solo nei log.
+- **Dare per chiusa una sessione senza guardare se la notifica è uscita.** Il
+  `finish` ha stampato "Sessione terminata" e il registry dice `Finished`: tutto
+  a posto in apparenza. Solo controllando il campo `notify` sul file di sessione
+  è emerso che i due testi erano ancora lì, mai spediti — ed è così che è stato
+  trovato il bug dell'evento perso. Il comando che riesce non dice nulla
+  sull'effetto che doveva produrre.
 
 ## 🚀 Next Steps
 
-1. **Chiedere a Giuseppe la causa del crash del gateway** — dice di averla
-   trovata. Se serve un fix nel compose, quello è un file `targets` di
-   `container-deployment`: richiede spec e voce di piano, non una modifica
-   diretta.
-2. **Osservare una notifica firmata `Codex`** appena il gateway regge, e togliere
+1. **Voce di piano per il bug dell'evento perso** (vedi § In sospeso). È il
+   candidato più forte al prossimo lavoro: rende inaffidabile l'intera catena di
+   notifica proprio quando il gateway ha un problema — cioè quando la notifica
+   serve di più.
+2. **Chiedere a Giuseppe la causa del crash del gateway** — dice di averla
+   trovata, il gateway è tornato a consegnare (`inviato started (composto) ->
+   claude-1786372837` nei log). Se serve un fix nel compose, quello è un file
+   `targets` di `container-deployment`: richiede spec e voce di piano, non una
+   modifica diretta.
+3. **Osservare una notifica firmata `Codex`** appena il gateway regge, e togliere
    la riserva dalla voce E04.
-3. **Decidere il warning del lock del watchdog**: registrare `watchdog` come
+4. **Decidere il warning del lock del watchdog**: registrare `watchdog` come
    sessione di servizio, oppure dare a `lock_manager` un modo esplicito di
    prendere un lock per un processo non-sessione.
-4. **Il piano è vuoto**: qualsiasi lavoro nuovo parte da `plan-mode` con una voce
+5. **Il piano è vuoto**: qualsiasi lavoro nuovo parte da `plan-mode` con una voce
    approvata, non da `openspec-propose`.
